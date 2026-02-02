@@ -1,0 +1,105 @@
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: ro-dosar-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dosar
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Temporal server
+  temporal:
+    image: temporalio/auto-setup:1.24
+    container_name: ro-dosar-temporal
+    environment:
+      - DB=postgres12_pgx
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - "7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: ro-dosar-temporal-ui
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8088:8080"
+    depends_on:
+      - temporal
+
+  # Main server (API + Temporal worker)
+  server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: ro-dosar-server
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/dosar?sslmode=disable
+      - TEMPORAL_HOST=temporal:7233
+      - HTTP_PORT=8080
+      - METRICS_PORT=9090
+      - BASE_URL=https://cetatenie.just.ro
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    restart: unless-stopped
+
+  # Parser (can be run manually or on schedule)
+  parser:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.parser
+    container_name: ro-dosar-parser
+    environment:
+      - TEMPORAL_HOST=temporal:7233
+      - BASE_URL=https://cetatenie.just.ro
+    depends_on:
+      - temporal
+    profiles:
+      - parser
+
+  # Scheduled cleanup job for PDF content
+  cleanup:
+    image: postgres:16-alpine
+    container_name: ro-dosar-cleanup
+    environment:
+      - PGHOST=postgres
+      - PGUSER=postgres
+      - PGPASSWORD=postgres
+      - PGDATABASE=dosar
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "0 * * * * psql -c 'SELECT cleanup_pdf_content()'" > /etc/crontabs/root
+        crond -f -l 2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en" x-data="app()" :class="{ 'dark': darkMode }">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title x-text="t('title')">Ro Dosar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'ro-blue': '#002B7F',
+                        'ro-yellow': '#FCD116',
+                        'ro-red': '#CE1126',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        [x-cloak] { display: none !important; }
+
+        .gradient-border {
+            background: linear-gradient(90deg, #002B7F 33%, #FCD116 33%, #FCD116 66%, #CE1126 66%);
+        }
+
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+
+        .pulse-border {
+            animation: pulse-border 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: #002B7F; }
+            50% { border-color: #FCD116; }
+        }
+
+        .slide-up {
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 transition-colors duration-300">
+    <!-- Top gradient border (Romanian flag colors) -->
+    <div class="gradient-border h-1 w-full fixed top-0 z-50"></div>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <!-- Language & Theme Toggle -->
+            <div class="flex justify-end gap-2 mb-6">
+                <!-- Language Toggle -->
+                <div class="inline-flex rounded-lg border border-slate-200 dark:border-slate-700 p-1 bg-white dark:bg-slate-800">
+                    <button
+                        @click="setLang('ro')"
+                        :class="lang === 'ro' ? 'bg-ro-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+                        class="px-3 py-1 rounded-md text-sm font-medium transition-all"
+                    >
+                        RO
+                    </button>
+                    <button
+                        @click="setLang('en')"
+                        :class="lang === 'en' ? 'bg-ro-blue text-white' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'"
+                        class="px-3 py-1 rounded-md text-sm font-medium transition-all"
+                    >
+                        EN
+                    </button>
+                </div>
+
+                <!-- Dark Mode Toggle -->
+                <button
+                    @click="darkMode = !darkMode"
+                    class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+                >
+                    <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                    </svg>
+                    <svg x-show="darkMode" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Romanian Flag -->
+            <div class="text-6xl mb-4">🇷🇴</div>
+
+            <!-- Title -->
+            <h1 class="text-4xl md:text-5xl font-bold text-ro-blue dark:text-white mb-3">
+                RO-DOSAR
+            </h1>
+            <p class="text-slate-600 dark:text-slate-400 text-lg" x-text="t('subtitle')"></p>
+        </header>
+
+        <!-- Search Card -->
+        <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 md:p-8 mb-8 card-hover">
+            <form @submit.prevent="search" class="space-y-6">
+                <div>
+                    <label for="query" class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2" x-text="t('documentNumber')"></label>
+                    <div class="relative">
+                        <input
+                            type="text"
+                            id="query"
+                            x-model="query"
+                            :placeholder="t('placeholder')"
+                            class="w-full px-4 py-4 text-lg border-2 border-slate-200 dark:border-slate-600 rounded-xl focus:border-ro-blue dark:focus:border-ro-yellow focus:outline-none transition-colors bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400"
+                            :class="{ 'pulse-border': loading }"
+                            autofocus
+                        >
+                        <div class="absolute right-4 top-1/2 -translate-y-1/2">
+                            <svg x-show="!loading" class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            <svg x-show="loading" x-cloak class="w-6 h-6 text-ro-blue dark:text-ro-yellow animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400" x-text="t('formatHint')"></p>
+                </div>
+
+                <button
+                    type="submit"
+                    :disabled="loading || !query.trim()"
+                    class="w-full py-4 px-6 bg-gradient-to-r from-ro-blue to-blue-700 hover:from-blue-700 hover:to-ro-blue text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                    <span class="flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        <span x-text="t('searchButton')"></span>
+                    </span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Error Message -->
+        <div
+            x-show="error"
+            x-cloak
+            x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 transform -translate-y-2"
+            x-transition:enter-end="opacity-100 transform translate-y-0"
+            class="mb-8 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl p-4"
+        >
+            <div class="flex items-center gap-3">
+                <div class="flex-shrink-0">
+                    <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <p class="text-red-700 dark:text-red-300" x-text="error"></p>
+            </div>
+        </div>
+
+        <!-- Loading Skeleton -->
+        <div x-show="loading && !document" x-cloak class="space-y-4">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 md:p-8">
+                <div class="shimmer h-8 w-48 rounded mb-6"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="shimmer h-20 rounded-xl"></div>
+                    <div class="shimmer h-20 rounded-xl"></div>
+                    <div class="shimmer h-20 rounded-xl"></div>
+                    <div class="shimmer h-20 rounded-xl"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div x-show="document" x-cloak class="slide-up">
+            <!-- Document Card -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden mb-6">
+                <!-- Card Header -->
+                <div class="gradient-border h-1"></div>
+                <div class="p-6 md:p-8">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+                            <svg class="w-7 h-7 text-ro-blue dark:text-ro-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            <span x-text="document?.documentNumber"></span>
+                        </h2>
+                    </div>
+
+                    <!-- Info Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Registration Date -->
+                        <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 card-hover">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                                    <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide" x-text="t('registrationDate')"></p>
+                                    <p class="text-lg font-semibold text-slate-800 dark:text-white" x-text="formatDate(document?.registeredAt)"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category -->
+                        <div
+                            class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 card-hover cursor-pointer hover:ring-2 hover:ring-purple-300 dark:hover:ring-purple-600 transition-all"
+                            @click="showCategoryModal = true"
+                        >
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                                    <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide" x-text="t('category')"></p>
+                                    <p class="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <span x-text="getCategoryName(document?.category)"></span>
+                                        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Term -->
+                        <div x-show="document?.term" class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 card-hover">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-amber-100 dark:bg-amber-900/50 rounded-lg">
+                                    <svg class="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide" x-text="t('term')"></p>
+                                    <p class="text-lg font-semibold text-slate-800 dark:text-white" x-text="formatDate(document?.term)"></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Solution Number -->
+                        <div x-show="document?.solutionNumber" class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 card-hover">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                                    <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide" x-text="t('solutionNumber')"></p>
+                                    <p class="text-lg font-semibold text-slate-800 dark:text-white" x-text="document?.solutionNumber"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Appointments -->
+            <div x-show="document?.appointments?.length > 0" class="space-y-4">
+                <h3 class="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <svg class="w-6 h-6 text-ro-blue dark:text-ro-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <span x-text="t('appointments')"></span>
+                    <span class="ml-2 px-2 py-0.5 bg-slate-200 dark:bg-slate-700 rounded-full text-sm" x-text="document?.appointments?.length"></span>
+                </h3>
+
+                <template x-for="(apt, index) in document?.appointments" :key="index">
+                    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-lg overflow-hidden card-hover">
+                        <div class="border-l-4" :class="getAppointmentBorderClass(apt)">
+                            <div class="p-5">
+                                <div class="flex flex-wrap items-center justify-between gap-4 mb-3">
+                                    <div class="flex items-center gap-3">
+                                        <span
+                                            class="px-3 py-1 rounded-full text-sm font-medium"
+                                            :class="getAppointmentTypeClass(apt)"
+                                            x-text="t(apt.type === 'INVITATION' ? 'invitation' : 'result')"
+                                        ></span>
+                                        <span class="text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                            </svg>
+                                            <span x-text="formatDate(apt.date)"></span>
+                                        </span>
+                                        <span x-show="apt.time" class="text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            <span x-text="apt.time"></span>
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div x-show="apt.result" class="mt-3">
+                                    <div
+                                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg"
+                                        :class="getResultClass(apt.result)"
+                                    >
+                                        <template x-if="isPositiveResult(apt.result)">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </template>
+                                        <template x-if="isNegativeResult(apt.result)">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </template>
+                                        <template x-if="!isPositiveResult(apt.result) && !isNegativeResult(apt.result)">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </template>
+                                        <span class="font-medium" x-text="apt.result"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-16 text-center text-slate-500 dark:text-slate-400 text-sm space-y-3">
+            <p x-text="t('footer')"></p>
+            <p>
+                <a href="https://cetatenie.just.ro" target="_blank" rel="noopener" class="text-ro-blue dark:text-ro-yellow hover:underline">
+                    cetatenie.just.ro
+                </a>
+            </p>
+            <p>
+                <button
+                    @click="showPrivacyModal = true"
+                    class="text-slate-400 hover:text-ro-blue dark:hover:text-ro-yellow underline transition-colors"
+                    x-text="lang === 'ro' ? 'Politica de confidențialitate' : 'Privacy Policy'"
+                ></button>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Category Info Modal -->
+    <div
+        x-show="showCategoryModal"
+        x-cloak
+        class="fixed inset-0 z-[100] overflow-y-auto"
+        @keydown.escape.window="showCategoryModal = false"
+    >
+        <!-- Backdrop -->
+        <div
+            class="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            @click="showCategoryModal = false"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+        ></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div
+                class="relative w-full max-w-lg bg-white dark:bg-slate-800 rounded-2xl shadow-2xl"
+                x-transition:enter="transition ease-out duration-200"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="transition ease-in duration-150"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                @click.stop
+            >
+                <!-- Header -->
+                <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg">
+                            <svg class="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-white" x-text="getCategoryName(document?.category)"></h3>
+                    </div>
+                    <button
+                        @click="showCategoryModal = false"
+                        class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Body -->
+                <div class="p-5 max-h-[60vh] overflow-y-auto">
+                    <!-- Legal source reference -->
+                    <div class="mb-4 pb-3 border-b border-slate-200 dark:border-slate-700">
+                        <p class="text-xs text-slate-500 dark:text-slate-400 italic" x-text="lang === 'ro' ? 'Legea cetățeniei române nr. 21/1991, republicată' : 'Romanian Citizenship Law No. 21/1991, republished'"></p>
+                    </div>
+
+                    <!-- Legal text with proper typography -->
+                    <div class="prose prose-slate dark:prose-invert prose-sm max-w-none">
+                        <div
+                            class="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-line font-serif"
+                            style="text-align: justify; hyphens: auto;"
+                            x-html="formatLegalText(document?.category?.description)"
+                        ></div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex justify-end p-5 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                        @click="showCategoryModal = false"
+                        class="px-4 py-2 bg-ro-blue hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                        x-text="lang === 'ro' ? 'Închide' : 'Close'"
+                    ></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Modal -->
+    <div
+        x-show="showPrivacyModal"
+        x-cloak
+        class="fixed inset-0 z-[100] overflow-y-auto"
+        @keydown.escape.window="showPrivacyModal = false"
+    >
+        <!-- Backdrop -->
+        <div
+            class="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            @click="showPrivacyModal = false"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+        ></div>
+
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div
+                class="relative w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl"
+                x-transition:enter="transition ease-out duration-200"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="transition ease-in duration-150"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                @click.stop
+            >
+                <!-- Header -->
+                <div class="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-green-100 dark:bg-green-900/50 rounded-lg">
+                            <svg class="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-white" x-text="lang === 'ro' ? 'Politica de confidențialitate' : 'Privacy Policy'"></h3>
+                    </div>
+                    <button
+                        @click="showPrivacyModal = false"
+                        class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Body -->
+                <div class="p-5 max-h-[60vh] overflow-y-auto space-y-6">
+                    <!-- No Personal Data -->
+                    <div class="flex gap-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-xl">
+                        <div class="flex-shrink-0">
+                            <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-green-800 dark:text-green-200 mb-1" x-text="lang === 'ro' ? 'Nu colectăm date personale' : 'We do not collect personal data'"></h4>
+                            <p class="text-green-700 dark:text-green-300 text-sm" x-text="lang === 'ro' ? 'Acest serviciu nu colectează, nu stochează și nu procesează nicio informație personală a utilizatorilor.' : 'This service does not collect, store, or process any personal information from users.'"></p>
+                        </div>
+                    </div>
+
+                    <!-- Data Source -->
+                    <div>
+                        <h4 class="font-semibold text-slate-800 dark:text-white mb-2" x-text="lang === 'ro' ? 'Sursa datelor' : 'Data Source'"></h4>
+                        <p class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed" x-text="lang === 'ro' ? 'Toate informațiile afișate sunt preluate din surse publice de pe site-ul oficial al Autorității Naționale pentru Cetățenie (cetatenie.just.ro). Nu modificăm și nu interpretăm aceste date.' : 'All displayed information is sourced from public data on the official website of the National Citizenship Authority (cetatenie.just.ro). We do not modify or interpret this data.'"></p>
+                    </div>
+
+                    <!-- Local Storage -->
+                    <div>
+                        <h4 class="font-semibold text-slate-800 dark:text-white mb-2" x-text="lang === 'ro' ? 'Stocare locală' : 'Local Storage'"></h4>
+                        <p class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed" x-text="lang === 'ro' ? 'Stocăm doar preferințele dvs. de limbă și temă (mod întunecat) în browserul dvs. local. Aceste date nu sunt transmise nicăieri.' : 'We only store your language and theme (dark mode) preferences in your local browser. This data is not transmitted anywhere.'"></p>
+                    </div>
+
+                    <!-- No Cookies -->
+                    <div>
+                        <h4 class="font-semibold text-slate-800 dark:text-white mb-2" x-text="lang === 'ro' ? 'Fără cookie-uri de tracking' : 'No Tracking Cookies'"></h4>
+                        <p class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed" x-text="lang === 'ro' ? 'Nu folosim cookie-uri de tracking, nu avem integrări cu rețele sociale și nu colectăm date analitice despre utilizatori.' : 'We do not use tracking cookies, have no social media integrations, and do not collect analytics data about users.'"></p>
+                    </div>
+
+                    <!-- GDPR Compliance -->
+                    <div class="flex gap-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
+                        <div class="flex-shrink-0">
+                            <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-blue-800 dark:text-blue-200 mb-1">GDPR</h4>
+                            <p class="text-blue-700 dark:text-blue-300 text-sm" x-text="lang === 'ro' ? 'Conform GDPR (Regulamentul General privind Protecția Datelor), acest serviciu nu necesită consimțământul dvs. pentru procesarea datelor personale, deoarece nu procesăm astfel de date.' : 'In accordance with GDPR (General Data Protection Regulation), this service does not require your consent for personal data processing, as we do not process such data.'"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex justify-end p-5 border-t border-slate-200 dark:border-slate-700">
+                    <button
+                        @click="showPrivacyModal = false"
+                        class="px-4 py-2 bg-ro-blue hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                        x-text="lang === 'ro' ? 'Închide' : 'Close'"
+                    ></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function app() {
+            return {
+                query: '',
+                document: null,
+                error: null,
+                loading: false,
+                showCategoryModal: false,
+                showPrivacyModal: false,
+                lang: localStorage.getItem('lang') || 'ro',
+                darkMode: localStorage.getItem('darkMode') === 'true',
+
+                translations: {
+                    en: {
+                        title: 'RO-DOSAR - Romanian Citizenship Status',
+                        subtitle: 'Check your Romanian citizenship application status',
+                        documentNumber: 'Document Number',
+                        placeholder: 'e.g., 10435/A/2025',
+                        formatHint: 'Format: NUMBER/CATEGORY/YEAR (e.g., 10435/A/2025)',
+                        searchButton: 'Search Document',
+                        registrationDate: 'Registration Date',
+                        category: 'Category',
+                        term: 'Term',
+                        solutionNumber: 'Solution Number',
+                        appointments: 'Appointments',
+                        invitation: 'Invitation',
+                        result: 'Result',
+                        notFound: 'Document not found',
+                        invalidFormat: 'Invalid document number format',
+                        error: 'An error occurred. Please try again.',
+                        footer: 'Data sourced from the Romanian National Citizenship Authority'
+                    },
+                    ro: {
+                        title: 'RO-DOSAR - Verificare Cetățenie',
+                        subtitle: 'Verificați statusul cererii de cetățenie română',
+                        documentNumber: 'Număr Dosar',
+                        placeholder: 'ex. 10435/A/2025',
+                        formatHint: 'Format: NUMĂR/CATEGORIE/AN (ex. 10435/A/2025)',
+                        searchButton: 'Caută Dosar',
+                        registrationDate: 'Data Înregistrării',
+                        category: 'Categorie',
+                        term: 'Termen',
+                        solutionNumber: 'Număr Soluție',
+                        appointments: 'Programări',
+                        invitation: 'Invitație',
+                        result: 'Rezultat',
+                        notFound: 'Dosarul nu a fost găsit',
+                        invalidFormat: 'Format invalid pentru numărul dosarului',
+                        error: 'A apărut o eroare. Vă rugăm încercați din nou.',
+                        footer: 'Date preluate de la Autoritatea Națională pentru Cetățenie'
+                    }
+                },
+
+                init() {
+                    this.$watch('darkMode', (value) => {
+                        localStorage.setItem('darkMode', value);
+                    });
+
+                    // Check URL for document number
+                    const params = new URLSearchParams(window.location.search);
+                    const docNum = params.get('doc');
+                    if (docNum) {
+                        this.query = docNum;
+                        this.search();
+                    }
+                },
+
+                t(key) {
+                    return this.translations[this.lang][key] || key;
+                },
+
+                setLang(newLang) {
+                    this.lang = newLang;
+                    localStorage.setItem('lang', newLang);
+                    document.documentElement.lang = newLang;
+                },
+
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString(this.lang === 'ro' ? 'ro-RO' : 'en-GB', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                    });
+                },
+
+                getCategoryName(category) {
+                    if (!category) return '';
+                    // If category is an object with name/nameRO fields
+                    if (typeof category === 'object') {
+                        return this.lang === 'ro' ? category.nameRO : category.name;
+                    }
+                    // Fallback for string category
+                    return category;
+                },
+
+                async search() {
+                    if (!this.query.trim()) return;
+
+                    this.loading = true;
+                    this.error = null;
+                    this.document = null;
+
+                    try {
+                        // Parse document number
+                        const match = this.query.trim().match(/^(\d+)\s*[\/\\]\s*([A-Za-z]+)\s*[\/\\]\s*(\d{4})$/);
+                        if (!match) {
+                            this.error = this.t('invalidFormat');
+                            return;
+                        }
+
+                        const [, number, category, year] = match;
+                        const response = await fetch(`/api/v1/documents/${number}/${category.toUpperCase()}/${year}`);
+
+                        if (response.status === 404) {
+                            this.error = this.t('notFound');
+                            return;
+                        }
+
+                        if (!response.ok) {
+                            const data = await response.json();
+                            this.error = data.detail || this.t('error');
+                            return;
+                        }
+
+                        this.document = await response.json();
+
+                        // Update URL
+                        const url = new URL(window.location);
+                        url.searchParams.set('doc', this.query.trim());
+                        window.history.pushState({}, '', url);
+
+                    } catch (err) {
+                        console.error(err);
+                        this.error = this.t('error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                getAppointmentTypeClass(apt) {
+                    if (apt.type === 'INVITATION') {
+                        return 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300';
+                    }
+                    return 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300';
+                },
+
+                getAppointmentBorderClass(apt) {
+                    if (apt.result) {
+                        if (this.isPositiveResult(apt.result)) return 'border-green-500';
+                        if (this.isNegativeResult(apt.result)) return 'border-red-500';
+                        return 'border-amber-500';
+                    }
+                    return apt.type === 'INVITATION' ? 'border-blue-500' : 'border-purple-500';
+                },
+
+                getResultClass(result) {
+                    if (this.isPositiveResult(result)) {
+                        return 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300';
+                    }
+                    if (this.isNegativeResult(result)) {
+                        return 'bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300';
+                    }
+                    return 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300';
+                },
+
+                isPositiveResult(result) {
+                    if (!result) return false;
+                    const lower = result.toLowerCase();
+                    return lower.includes('pozitiv') || lower.includes('admis');
+                },
+
+                isNegativeResult(result) {
+                    if (!result) return false;
+                    const lower = result.toLowerCase();
+                    return lower.includes('negativ') || lower.includes('respins') || lower.includes('absent');
+                },
+
+                formatLegalText(text) {
+                    if (!text) return '';
+
+                    // Escape HTML
+                    let formatted = text
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+
+                    // Format paragraph numbers like (1), (2), (3) at start of lines
+                    formatted = formatted.replace(/^(\(\d+\))/gm,
+                        '<span class="font-bold text-ro-blue dark:text-ro-yellow">$1</span>');
+
+                    // Format letter items like a), b), c) at start of lines
+                    formatted = formatted.replace(/^([a-z]\))/gm,
+                        '<span class="font-semibold text-purple-600 dark:text-purple-400 ml-4">$1</span>');
+
+                    // Convert newlines to <br> for proper line breaks
+                    formatted = formatted.replace(/\n\n/g, '</p><p class="mt-3">');
+                    formatted = formatted.replace(/\n/g, '<br>');
+
+                    return '<p>' + formatted + '</p>';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
