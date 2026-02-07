@@ -88,14 +88,18 @@ func (b *BrowserClient) FetchPage(ctx context.Context, url string) ([]byte, stri
 		return nil, "", err
 	}
 
+	// Create a context with 1 minute timeout for waiting PDF links
+	timeoutCtx, cancel := context.WithTimeout(b.taskCtx, 1*time.Minute)
+	defer cancel()
+
 	var html string
-	err := chromedp.Run(b.taskCtx,
+	err := chromedp.Run(timeoutCtx,
 		chromedp.Navigate(url),
-		chromedp.Sleep(2*time.Second), // Give some time for JS to render
+		chromedp.WaitVisible("a[href$='.pdf']", chromedp.ByQuery),
 		chromedp.OuterHTML("html", &html),
 	)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch page: %w", err)
+		return nil, "", fmt.Errorf("failed to fetch page (timeout waiting for PDF links): %w", err)
 	}
 
 	hash := sha256.Sum256([]byte(html))

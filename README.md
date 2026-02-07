@@ -194,6 +194,21 @@ The project uses GitHub Actions for continuous integration and deployment:
   - `ghcr.io/g0ddest/ro-dosar/parser:<commit-sha>`
   - Also tagged as `latest`
 
+## 🚀 Nomad Deployment
+
+Nomad job files are located in `deploy/nomad/`:
+
+```bash
+# Deploy the main server
+nomad job run deploy/nomad/ro-dosar.nomad
+
+# Deploy the periodic parser (runs daily at 6:00 AM)
+nomad job run deploy/nomad/ro-dosar-parser.nomad
+
+# Run parser manually
+nomad job dispatch ro-dosar-parser
+```
+
 ## 📝 License
 
 MIT License - see [LICENSE](LICENSE) for details.
