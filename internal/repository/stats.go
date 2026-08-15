@@ -43,15 +43,6 @@ type StatsRepository interface {
 	// solutions appeared and terms changed since the given time
 	GetRecentActivity(ctx context.Context, since time.Time) ([]CategoryYearActivity, error)
 
-	// CountAheadInQueue counts unsolved documents of the category registered
-	// before the given document: earlier year, or same year with a smaller
-	// document number (numbers are sequential within a year)
-	CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error)
-
-	// CountSolvedInYear counts the category's documents whose solution_number
-	// year segment (e.g. 215/P/2021 -> 2021) equals the given year
-	CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error)
-
 	// GetCohortMatrix returns solved-dossier counts and number percentiles
 	// grouped by category, registration year and solution year
 	GetCohortMatrix(ctx context.Context) ([]CohortCell, error)

@@ -149,7 +149,7 @@ func (h *Handler) GetDocument(w http.ResponseWriter, r *http.Request) {
 
 	response := h.documentToResponse(doc, appointments)
 	if doc.SolutionNumber == nil {
-		if queue, err := h.buildQueueInfo(r.Context(), doc); err == nil {
+		if queue, err := h.buildQueueInfo(r.Context(), doc); err == nil && queue != nil {
 			response.Queue = queue
 		}
 	}

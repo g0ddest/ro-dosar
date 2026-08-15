@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"math"
 	"net/http"
 	"sort"
 	"time"
@@ -63,12 +62,13 @@ type StatsResponse struct {
 	Categories         []CategoryStatsResponse `json:"categories"`
 }
 
-// QueueResponse describes an unsolved document's position in its category queue
+// QueueResponse is the wave-model estimate for an unsolved document
 type QueueResponse struct {
-	Ahead            int  `json:"ahead"`
-	SolvedLast90Days int  `json:"solvedLast90Days"`
-	SolvedLastYear   *int `json:"solvedLastYear,omitempty"`
-	EstimatedMonths  *int `json:"estimatedMonths,omitempty"`
+	CohortTotal        int     `json:"cohortTotal"`
+	Percentile         float64 `json:"percentile"`
+	WavePassed         bool    `json:"wavePassed"`
+	EstimatedMonthsMin *int    `json:"estimatedMonthsMin,omitempty"`
+	EstimatedMonthsMax *int    `json:"estimatedMonthsMax,omitempty"`
 }
 
 // buildStatsResponse assembles the stats payload: fixed category order,
@@ -172,45 +172,19 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, resp)
 }
 
-// buildQueueInfo computes an unsolved document's queue position and a rough
-// linear estimate from the recent processing pace
+// buildQueueInfo computes the wave-model estimate for an unsolved document
+// from the cached stats payload; no per-request SQL is involved
 func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*QueueResponse, error) {
-	ahead, err := h.statsRepo.CountAheadInQueue(ctx, doc.Category.String(), doc.RegisteredAt.Year(), doc.DocumentNumber.Number)
-	if err != nil {
-		return nil, err
-	}
-
 	stats, err := h.getStatsCached(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	solved90 := 0
 	for _, cat := range stats.Categories {
 		if cat.Category.Code == doc.Category.String() {
-			for _, a := range cat.RecentActivity {
-				solved90 += a.Solved
-			}
+			return buildWaveEstimate(cat, doc.RegisteredAt.Year(), doc.DocumentNumber.Number, time.Now()), nil
 		}
 	}
-
-	queue := &QueueResponse{Ahead: ahead, SolvedLast90Days: solved90}
-	if solved90 > 0 {
-		months := int(math.Ceil(float64(ahead) / (float64(solved90) / 3.0)))
-		queue.EstimatedMonths = &months
-		return queue, nil
-	}
-
-	lastYear, err := h.statsRepo.CountSolvedInYear(ctx, doc.Category.String(), time.Now().Year()-1)
-	if err != nil {
-		return nil, err
-	}
-	if lastYear > 0 {
-		queue.SolvedLastYear = &lastYear
-		months := int(math.Ceil(float64(ahead) / (float64(lastYear) / 12.0)))
-		queue.EstimatedMonths = &months
-	}
-	return queue, nil
+	return nil, nil
 }
 
 // CohortCellResponse is one (registration year, solution year) cell

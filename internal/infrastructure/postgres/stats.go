@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"ro-dosar/internal/repository"
@@ -85,40 +84,6 @@ func (r *StatsRepository) GetRecentActivity(ctx context.Context, since time.Time
 	}
 
 	return activity, rows.Err()
-}
-
-// CountAheadInQueue counts unsolved documents of the category registered
-// before the given document (earlier year, or same year with a smaller number)
-func (r *StatsRepository) CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error) {
-	query := `
-		SELECT COUNT(*)::int
-		FROM documents
-		WHERE category = $1
-		  AND solution_number IS NULL
-		  AND (EXTRACT(YEAR FROM registered_at)::int < $2
-		       OR (EXTRACT(YEAR FROM registered_at)::int = $2
-		           AND split_part(document_number, '/', 1)::int < $3))
-	`
-
-	var count int
-	err := r.db.Pool.QueryRow(ctx, query, category, year, number).Scan(&count)
-	return count, err
-}
-
-// CountSolvedInYear counts the category's documents whose solution_number
-// year segment equals the given year
-func (r *StatsRepository) CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error) {
-	query := `
-		SELECT COUNT(*)::int
-		FROM documents
-		WHERE category = $1
-		  AND solution_number IS NOT NULL
-		  AND split_part(solution_number, '/', 3) = $2
-	`
-
-	var count int
-	err := r.db.Pool.QueryRow(ctx, query, category, strconv.Itoa(solutionYear)).Scan(&count)
-	return count, err
 }
 
 // GetCohortMatrix returns solved-dossier counts and number percentiles
