@@ -30,4 +30,9 @@ type StatsRepository interface {
 	// GetRecentActivity returns per-category, per-registration-year counts of
 	// solutions appeared and terms changed since the given time
 	GetRecentActivity(ctx context.Context, since time.Time) ([]CategoryYearActivity, error)
+
+	// CountAheadInQueue counts unsolved documents of the category registered
+	// before the given document: earlier year, or same year with a smaller
+	// document number (numbers are sequential within a year)
+	CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error)
 }
