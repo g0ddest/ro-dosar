@@ -11,4 +11,5 @@ var (
 	ErrInvalidCategory       = errors.New("invalid category")
 	ErrInvalidFileType       = errors.New("invalid file type")
 	ErrRemoteFileNotFound    = errors.New("remote file not found (HTTP 404)")
+	ErrOrdinNotFound         = errors.New("ordin not found")
 )

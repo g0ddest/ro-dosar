@@ -3,7 +3,10 @@ package parser
 import (
 	"io"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -214,4 +217,85 @@ func (p *HTMLParser) extractCategory(pdfURL, title string) string {
 // extractFileType attempts to determine the file type from URL or title (fallback)
 func (p *HTMLParser) extractFileType(pdfURL, title string) string {
 	return p.extractFileTypeFromContext("", pdfURL, title)
+}
+
+// OrdinLink is one ordin PDF reference parsed from an Ordine listing page
+type OrdinLink struct {
+	Number int
+	Letter string
+	Date   time.Time
+	URL    string
+}
+
+var (
+	ordinTextPattern = regexp.MustCompile(`^\s*(\d+)\s*[-.]?\s*([A-Za-z]{1,3})?\s*$`)
+	ordinDatePattern = regexp.MustCompile(`(\d{1,2})\.(\d{1,2})\.(\d{4})`)
+)
+
+// ExtractOrdinLinks parses an Ordine listing page: the anchor text carries
+// the ordin number ("2637P"), the PDF filename carries the date
+// ("Ordin-2637P-12.08.2026-art-11.pdf"). Anchors without a parseable number
+// or date are skipped — the index is best-effort. pdfAnchors counts every
+// anchor whose href ends in ".pdf", regardless of whether it was extracted,
+// so callers can measure how many candidates were skipped.
+func ExtractOrdinLinks(htmlContent, baseURL string) (links []OrdinLink, pdfAnchors int, err error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		if !strings.HasSuffix(strings.ToLower(strings.TrimSpace(href)), ".pdf") {
+			return
+		}
+		pdfAnchors++
+
+		// WordPress anchor text often contains non-breaking spaces (U+00A0)
+		// instead of regular spaces; Go's \s does not match them.
+		text := strings.ReplaceAll(s.Text(), " ", " ")
+
+		m := ordinTextPattern.FindStringSubmatch(text)
+		if m == nil {
+			return
+		}
+		number, err := strconv.Atoi(m[1])
+		if err != nil {
+			return
+		}
+		letter := strings.ToUpper(m[2])
+		if letter == "" {
+			letter = "P"
+		}
+
+		d := ordinDatePattern.FindStringSubmatch(href)
+		if d == nil {
+			return
+		}
+		day, _ := strconv.Atoi(d[1])
+		month, _ := strconv.Atoi(d[2])
+		year, _ := strconv.Atoi(d[3])
+		if month < 1 || month > 12 || day < 1 || day > 31 {
+			return
+		}
+
+		ref, err := url.Parse(strings.TrimSpace(href))
+		if err != nil {
+			return
+		}
+
+		links = append(links, OrdinLink{
+			Number: number,
+			Letter: letter,
+			Date:   time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC),
+			URL:    base.ResolveReference(ref).String(),
+		})
+	})
+
+	return links, pdfAnchors, nil
 }

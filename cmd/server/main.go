@@ -68,6 +68,7 @@ func main() {
 	w.RegisterWorkflow(workflow.UpdateDocumentWorkflow)
 	w.RegisterWorkflow(workflow.ProcessAppointmentWorkflow)
 	w.RegisterWorkflow(workflow.NotifyWorkflow)
+	w.RegisterWorkflow(workflow.OrdineIndexWorkflow)
 
 	// Register activities
 	w.RegisterActivity(activities.FetchPage)
@@ -83,6 +84,8 @@ func main() {
 	w.RegisterActivity(activities.SaveAuditLog)
 	w.RegisterActivity(activities.GetAppointment)
 	w.RegisterActivity(activities.SaveAppointment)
+	w.RegisterActivity(activities.ExtractOrdine)
+	w.RegisterActivity(activities.SaveOrdine)
 
 	// Start worker in background
 	go func() {
@@ -96,9 +99,11 @@ func main() {
 	documentRepo := postgres.NewDocumentRepository(db)
 	appointmentRepo := postgres.NewAppointmentRepository(db)
 	statsRepo := postgres.NewStatsRepository(db)
+	auditRepo := postgres.NewDocumentAuditRepository(db)
+	ordinRepo := postgres.NewOrdinRepository(db)
 
 	// Initialize API handler
-	apiHandler := api.NewHandler(documentRepo, appointmentRepo, statsRepo)
+	apiHandler := api.NewHandler(documentRepo, appointmentRepo, statsRepo, auditRepo, ordinRepo)
 	apiRouter := api.NewRouter(apiHandler)
 
 	// Initialize Web handler (SPA)

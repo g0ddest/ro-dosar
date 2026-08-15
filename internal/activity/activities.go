@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	"go.temporal.io/sdk/activity"
+
 	"ro-dosar/internal/domain"
 	infrahttp "ro-dosar/internal/infrastructure/http"
 	"ro-dosar/internal/infrastructure/pdf"
@@ -28,6 +30,7 @@ type Activities struct {
 	parsedFileRepo  repository.ParsedFileRepository
 	auditRepo       repository.DocumentAuditRepository
 	pdfContentRepo  repository.PDFContentRepository
+	ordinRepo       repository.OrdinRepository
 }
 
 // NewActivities creates a new Activities instance
@@ -48,6 +51,7 @@ func NewActivities(
 		parsedFileRepo:  postgres.NewParsedFileRepository(db),
 		auditRepo:       postgres.NewDocumentAuditRepository(db),
 		pdfContentRepo:  postgres.NewPDFContentRepository(db),
+		ordinRepo:       postgres.NewOrdinRepository(db),
 	}
 }
 
@@ -497,4 +501,48 @@ func normalizeTextForHash(text string) string {
 	normalized = strings.TrimSpace(normalized)
 
 	return normalized
+}
+
+// ExtractOrdineInput contains input for ExtractOrdine activity
+type ExtractOrdineInput struct {
+	Content []byte
+	PageURL string
+}
+
+// ExtractOrdineOutput contains output from ExtractOrdine activity
+type ExtractOrdineOutput struct {
+	Ordins []repository.Ordin
+}
+
+// ExtractOrdine parses an Ordine listing page into indexable ordin records
+func (a *Activities) ExtractOrdine(ctx context.Context, input ExtractOrdineInput) (*ExtractOrdineOutput, error) {
+	links, pdfAnchors, err := parser.ExtractOrdinLinks(string(input.Content), input.PageURL)
+	if err != nil {
+		return nil, err
+	}
+	if skipped := pdfAnchors - len(links); skipped > 0 {
+		activity.GetLogger(ctx).Info("Ordine anchors skipped", "page", input.PageURL, "skipped", skipped, "extracted", len(links))
+	}
+
+	out := &ExtractOrdineOutput{}
+	for _, l := range links {
+		out.Ordins = append(out.Ordins, repository.Ordin{
+			URL:        l.URL,
+			Number:     l.Number,
+			Letter:     l.Letter,
+			Date:       l.Date,
+			SourcePage: input.PageURL,
+		})
+	}
+	return out, nil
+}
+
+// SaveOrdineInput contains input for SaveOrdine activity
+type SaveOrdineInput struct {
+	Ordins []repository.Ordin
+}
+
+// SaveOrdine upserts the extracted ordins
+func (a *Activities) SaveOrdine(ctx context.Context, input SaveOrdineInput) error {
+	return a.ordinRepo.SaveBatch(ctx, input.Ordins)
 }

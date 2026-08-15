@@ -14,6 +14,7 @@ import (
 func main() {
 	// Parse command line flags
 	pageURL := flag.String("url", "", "URL of the page to parse")
+	ordine := flag.Bool("ordine", false, "index the Ordine listing pages instead of parsing dossiers")
 	flag.Parse()
 
 	// Load configuration from environment
@@ -39,6 +40,33 @@ func main() {
 	}
 	defer temporalClient.Close()
 	log.Println("Connected to Temporal")
+
+	if *ordine {
+		ordineURLs := []string{
+			baseURL + "/ordine-articolul-8/",
+			baseURL + "/ordine-articolul-10/",
+			baseURL + "/ordine-articolul-1-1/",
+		}
+		we, err := temporalClient.ExecuteWorkflow(
+			context.Background(),
+			client.StartWorkflowOptions{
+				ID:        "ordine-index",
+				TaskQueue: workflow.TaskQueue,
+			},
+			workflow.OrdineIndexWorkflow,
+			workflow.OrdineIndexWorkflowInput{URLs: ordineURLs},
+		)
+		if err != nil {
+			log.Fatalf("Failed to start ordine workflow: %v", err)
+		}
+		log.Printf("Started OrdineIndexWorkflow: %s", we.GetID())
+		var result workflow.OrdineIndexWorkflowOutput
+		if err := we.Get(context.Background(), &result); err != nil {
+			log.Fatalf("Ordine workflow failed: %v", err)
+		}
+		log.Printf("Ordine indexing done: %d indexed, %d pages failed", result.Indexed, len(result.Failed))
+		return
+	}
 
 	// Start the ParsePageWorkflow
 	workflowOptions := client.StartWorkflowOptions{

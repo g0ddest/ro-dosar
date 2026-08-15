@@ -43,8 +43,47 @@ func (r *MockStatsRepository) GetCohortMatrix(ctx context.Context) ([]repository
 	return r.cohorts, r.cohortsErr
 }
 
+// MockAuditRepository is a mock implementation of DocumentAuditRepository
+type MockAuditRepository struct {
+	events    []repository.ChangeEvent
+	eventsErr error
+}
+
+func (r *MockAuditRepository) Log(ctx context.Context, docNum domain.DocumentNumber, action repository.AuditAction, oldState, newState *domain.Document) error {
+	return nil
+}
+
+func (r *MockAuditRepository) GetHistory(ctx context.Context, docNum domain.DocumentNumber) ([]repository.DocumentAuditEntry, error) {
+	return nil, nil
+}
+
+func (r *MockAuditRepository) GetChangeEvents(ctx context.Context, docNum domain.DocumentNumber) ([]repository.ChangeEvent, error) {
+	return r.events, r.eventsErr
+}
+
+// MockOrdinRepository is a mock implementation of OrdinRepository
+type MockOrdinRepository struct {
+	ordin    *repository.Ordin
+	ordinErr error
+}
+
+func (r *MockOrdinRepository) SaveBatch(ctx context.Context, ordins []repository.Ordin) error {
+	return nil
+}
+
+func (r *MockOrdinRepository) GetBySolution(ctx context.Context, number int, letter string, year int) (*repository.Ordin, error) {
+	if r.ordinErr != nil {
+		return nil, r.ordinErr
+	}
+	if r.ordin == nil {
+		return nil, domain.ErrOrdinNotFound
+	}
+	return r.ordin, nil
+}
+
 func newStatsHandler(statsRepo repository.StatsRepository) *Handler {
-	return NewHandler(NewMockDocumentRepository(), NewMockAppointmentRepository(), statsRepo)
+	return NewHandler(NewMockDocumentRepository(), NewMockAppointmentRepository(), statsRepo,
+		&MockAuditRepository{}, &MockOrdinRepository{})
 }
 
 func doStatsRequest(t *testing.T, handler *Handler) *httptest.ResponseRecorder {
@@ -285,7 +324,8 @@ func TestGetDocument_WaveQueueForUnsolved(t *testing.T) {
 			Category: "ART_11", Year: a.Year, Solved: a.Solved,
 		})
 	}
-	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo,
+		&MockAuditRepository{}, &MockOrdinRepository{})
 
 	rec := doDocumentRequest(t, handler, "39946", "RD", "2024")
 
@@ -311,7 +351,8 @@ func TestGetDocument_WaveQueueForUnsolved(t *testing.T) {
 
 func TestGetDocument_NoQueueForSolved(t *testing.T) {
 	docRepo := newQueueDocument(t, "101/A/2021", time.Date(2021, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", true)
-	handler := NewHandler(docRepo, NewMockAppointmentRepository(), &MockStatsRepository{})
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), &MockStatsRepository{},
+		&MockAuditRepository{}, &MockOrdinRepository{})
 
 	rec := doDocumentRequest(t, handler, "101", "A", "2021")
 
@@ -323,7 +364,8 @@ func TestGetDocument_NoQueueForSolved(t *testing.T) {
 func TestGetDocument_QueueAbsentWhenCategoryUnknown(t *testing.T) {
 	docRepo := newQueueDocument(t, "10/A/2024", time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
 	statsRepo := &MockStatsRepository{} // no yearly stats at all
-	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo,
+		&MockAuditRepository{}, &MockOrdinRepository{})
 
 	rec := doDocumentRequest(t, handler, "10", "A", "2024")
 
@@ -338,7 +380,8 @@ func TestGetDocument_QueueAbsentWhenCategoryUnknown(t *testing.T) {
 func TestGetDocument_QueueErrorNonFatal(t *testing.T) {
 	docRepo := newQueueDocument(t, "10/A/2024", time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
 	statsRepo := &MockStatsRepository{yearlyErr: context.DeadlineExceeded}
-	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo,
+		&MockAuditRepository{}, &MockOrdinRepository{})
 
 	rec := doDocumentRequest(t, handler, "10", "A", "2024")
 

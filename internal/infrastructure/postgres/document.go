@@ -285,6 +285,35 @@ func (r *DocumentAuditRepository) GetHistory(ctx context.Context, docNum domain.
 	return entries, rows.Err()
 }
 
+// GetChangeEvents returns the document's audit transitions in chronological order
+func (r *DocumentAuditRepository) GetChangeEvents(ctx context.Context, docNum domain.DocumentNumber) ([]repository.ChangeEvent, error) {
+	query := `
+		SELECT created_at,
+		       old_state->>'term', new_state->>'term',
+		       old_state->>'solution_number', new_state->>'solution_number'
+		FROM document_audit_log
+		WHERE document_number = $1 AND action = 'UPDATE'
+		ORDER BY created_at ASC
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, docNum.String())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []repository.ChangeEvent
+	for rows.Next() {
+		var e repository.ChangeEvent
+		if err := rows.Scan(&e.NoticedAt, &e.OldTerm, &e.NewTerm, &e.OldSolution, &e.NewSolution); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+
+	return events, rows.Err()
+}
+
 // documentToMap converts a Document to a map for JSON serialization
 func documentToMap(doc *domain.Document) map[string]interface{} {
 	m := map[string]interface{}{
