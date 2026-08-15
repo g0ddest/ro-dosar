@@ -95,9 +95,10 @@ func main() {
 	// Initialize repositories
 	documentRepo := postgres.NewDocumentRepository(db)
 	appointmentRepo := postgres.NewAppointmentRepository(db)
+	statsRepo := postgres.NewStatsRepository(db)
 
 	// Initialize API handler
-	apiHandler := api.NewHandler(documentRepo, appointmentRepo)
+	apiHandler := api.NewHandler(documentRepo, appointmentRepo, statsRepo)
 	apiRouter := api.NewRouter(apiHandler)
 
 	// Initialize Web handler (SPA)
@@ -108,7 +109,7 @@ func main() {
 
 	// Create main server mux
 	mainMux := http.NewServeMux()
-	mainMux.Handle("/api/v1/documents/", http.StripPrefix("/api/v1", apiRouter))
+	mainMux.Handle("/api/v1/", http.StripPrefix("/api/v1", apiRouter))
 	mainMux.Handle("/", webHandler.Router())
 
 	// Start main HTTP server

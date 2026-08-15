@@ -1,0 +1,87 @@
+package postgres
+
+import (
+	"context"
+	"time"
+
+	"ro-dosar/internal/repository"
+)
+
+// StatsRepository implements repository.StatsRepository using PostgreSQL
+type StatsRepository struct {
+	db *DB
+}
+
+// NewStatsRepository creates a new PostgreSQL stats repository
+func NewStatsRepository(db *DB) *StatsRepository {
+	return &StatsRepository{db: db}
+}
+
+// GetYearlyStats returns per-category, per-registration-year document counts
+func (r *StatsRepository) GetYearlyStats(ctx context.Context) ([]repository.CategoryYearStats, error) {
+	query := `
+		SELECT category,
+		       EXTRACT(YEAR FROM registered_at)::int AS year,
+		       COUNT(*)::int               AS total,
+		       COUNT(solution_number)::int AS solved,
+		       COUNT(term)::int            AS with_term
+		FROM documents
+		GROUP BY 1, 2
+		ORDER BY 1, 2
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []repository.CategoryYearStats
+	for rows.Next() {
+		var s repository.CategoryYearStats
+		if err := rows.Scan(&s.Category, &s.Year, &s.Total, &s.Solved, &s.WithTerm); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+
+	return stats, rows.Err()
+}
+
+// GetRecentActivity returns per-category, per-registration-year counts of
+// solutions appeared and terms changed since the given time.
+// Only UPDATE audit entries count: the initial parse creates all records at
+// once and would flood the activity signal via CREATE entries.
+func (r *StatsRepository) GetRecentActivity(ctx context.Context, since time.Time) ([]repository.CategoryYearActivity, error) {
+	query := `
+		SELECT new_state->>'category' AS category,
+		       EXTRACT(YEAR FROM (new_state->>'registered_at')::date)::int AS year,
+		       (COUNT(*) FILTER (WHERE old_state->>'solution_number' IS NULL
+		                           AND new_state->>'solution_number' IS NOT NULL))::int AS solved,
+		       (COUNT(*) FILTER (WHERE new_state->>'term' IS NOT NULL
+		                           AND old_state->>'term' IS DISTINCT FROM
+		                               new_state->>'term'))::int                        AS terms_set
+		FROM document_audit_log
+		WHERE action = 'UPDATE'
+		  AND created_at >= $1
+		  AND new_state->>'registered_at' IS NOT NULL
+		GROUP BY 1, 2
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var activity []repository.CategoryYearActivity
+	for rows.Next() {
+		var a repository.CategoryYearActivity
+		if err := rows.Scan(&a.Category, &a.Year, &a.Solved, &a.TermsSet); err != nil {
+			return nil, err
+		}
+		activity = append(activity, a)
+	}
+
+	return activity, rows.Err()
+}
