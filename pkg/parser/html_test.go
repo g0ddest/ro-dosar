@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParsePDFLinks(t *testing.T) {
@@ -182,5 +183,44 @@ func TestExtractFileTypeFromContext(t *testing.T) {
 				t.Errorf("extractFileTypeFromContext() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestExtractOrdinLinks(t *testing.T) {
+	html := `
+	<html><body>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2637P-12.08.2026-art-11.pdf">2637P</a>
+	<a href="/wp-content/uploads/2023/11/ordin-2590P-06.08.2026-art-11.pdf">2590P</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2543-P-03.08.2026-art-11.pdf">2543P</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2550-P-DIN-03.08.2026-art-11.pdf">2550P</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2537-30.07.2026-art-11i.pdf">2537</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/undated.pdf">2999P</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/Ordin-x-01.01.2026.pdf">Descarca aici</a>
+	<a href="https://cetatenie.just.ro/despre-noi/">2638P</a>
+	</body></html>`
+
+	links, err := ExtractOrdinLinks(html, "https://cetatenie.just.ro/ordine-articolul-1-1/")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(links) != 5 {
+		t.Fatalf("expected 5 links (dateless, non-numeric-text and non-pdf skipped), got %d: %+v", len(links), links)
+	}
+
+	first := links[0]
+	if first.Number != 2637 || first.Letter != "P" ||
+		!first.Date.Equal(time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)) ||
+		first.URL != "https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2637P-12.08.2026-art-11.pdf" {
+		t.Errorf("wrong first link: %+v", first)
+	}
+
+	if links[1].URL != "https://cetatenie.just.ro/wp-content/uploads/2023/11/ordin-2590P-06.08.2026-art-11.pdf" {
+		t.Errorf("relative href must resolve against base: %+v", links[1])
+	}
+
+	// letter defaults to P when the anchor text has no letter
+	if links[4].Number != 2537 || links[4].Letter != "P" {
+		t.Errorf("expected default letter P: %+v", links[4])
 	}
 }
