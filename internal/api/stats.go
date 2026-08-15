@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"math"
 	"net/http"
 	"sort"
 	"time"
@@ -63,12 +62,13 @@ type StatsResponse struct {
 	Categories         []CategoryStatsResponse `json:"categories"`
 }
 
-// QueueResponse describes an unsolved document's position in its category queue
+// QueueResponse is the wave-model estimate for an unsolved document
 type QueueResponse struct {
-	Ahead            int  `json:"ahead"`
-	SolvedLast90Days int  `json:"solvedLast90Days"`
-	SolvedLastYear   *int `json:"solvedLastYear,omitempty"`
-	EstimatedMonths  *int `json:"estimatedMonths,omitempty"`
+	CohortTotal        int     `json:"cohortTotal"`
+	Percentile         float64 `json:"percentile"`
+	WavePassed         bool    `json:"wavePassed"`
+	EstimatedMonthsMin *int    `json:"estimatedMonthsMin,omitempty"`
+	EstimatedMonthsMax *int    `json:"estimatedMonthsMax,omitempty"`
 }
 
 // buildStatsResponse assembles the stats payload: fixed category order,
@@ -172,43 +172,98 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, resp)
 }
 
-// buildQueueInfo computes an unsolved document's queue position and a rough
-// linear estimate from the recent processing pace
+// buildQueueInfo computes the wave-model estimate for an unsolved document
+// from the cached stats payload; no per-request SQL is involved
 func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*QueueResponse, error) {
-	ahead, err := h.statsRepo.CountAheadInQueue(ctx, doc.Category.String(), doc.RegisteredAt.Year(), doc.DocumentNumber.Number)
-	if err != nil {
-		return nil, err
-	}
-
 	stats, err := h.getStatsCached(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	solved90 := 0
 	for _, cat := range stats.Categories {
 		if cat.Category.Code == doc.Category.String() {
-			for _, a := range cat.RecentActivity {
-				solved90 += a.Solved
-			}
+			return buildWaveEstimate(cat, doc.RegisteredAt.Year(), doc.DocumentNumber.Number, time.Now()), nil
 		}
 	}
+	return nil, nil
+}
 
-	queue := &QueueResponse{Ahead: ahead, SolvedLast90Days: solved90}
-	if solved90 > 0 {
-		months := int(math.Ceil(float64(ahead) / (float64(solved90) / 3.0)))
-		queue.EstimatedMonths = &months
-		return queue, nil
+// CohortCellResponse is one (registration year, solution year) cell
+type CohortCellResponse struct {
+	RegYear int `json:"regYear"`
+	SolYear int `json:"solYear"`
+	Count   int `json:"count"`
+	P50     int `json:"p50"`
+	P90     int `json:"p90"`
+}
+
+// CategoryCohortsResponse groups cohort cells for one category
+type CategoryCohortsResponse struct {
+	Category StatsCategoryRef     `json:"category"`
+	Cohorts  []CohortCellResponse `json:"cohorts"`
+}
+
+// CohortStatsResponse is the GET /api/v1/stats/cohorts payload
+type CohortStatsResponse struct {
+	GeneratedAt string                    `json:"generatedAt"`
+	Categories  []CategoryCohortsResponse `json:"categories"`
+}
+
+// buildCohortResponse assembles the matrix payload in fixed category order
+func buildCohortResponse(cells []repository.CohortCell, now time.Time) *CohortStatsResponse {
+	byCategory := make(map[string][]CohortCellResponse)
+	for _, c := range cells {
+		byCategory[c.Category] = append(byCategory[c.Category], CohortCellResponse{
+			RegYear: c.RegYear, SolYear: c.SolYear, Count: c.Count, P50: c.P50, P90: c.P90,
+		})
 	}
 
-	lastYear, err := h.statsRepo.CountSolvedInYear(ctx, doc.Category.String(), time.Now().Year()-1)
+	resp := &CohortStatsResponse{
+		GeneratedAt: now.UTC().Format(time.RFC3339),
+		Categories:  []CategoryCohortsResponse{},
+	}
+	for _, cat := range statsCategoryOrder {
+		cohorts, ok := byCategory[cat.String()]
+		if !ok {
+			continue
+		}
+		sort.Slice(cohorts, func(i, j int) bool {
+			if cohorts[i].RegYear != cohorts[j].RegYear {
+				return cohorts[i].RegYear < cohorts[j].RegYear
+			}
+			return cohorts[i].SolYear < cohorts[j].SolYear
+		})
+		info := cat.Info()
+		resp.Categories = append(resp.Categories, CategoryCohortsResponse{
+			Category: StatsCategoryRef{Code: info.Code, Name: info.Name, NameRO: info.NameRO},
+			Cohorts:  cohorts,
+		})
+	}
+	return resp
+}
+
+// GetCohortStats handles GET /api/v1/stats/cohorts
+func (h *Handler) GetCohortStats(w http.ResponseWriter, r *http.Request) {
+	h.cohortMu.Lock()
+	if h.cohortCache != nil && time.Since(h.cohortCacheAt) < statsCacheTTL {
+		cached := h.cohortCache
+		h.cohortMu.Unlock()
+		h.writeJSON(w, http.StatusOK, cached)
+		return
+	}
+	h.cohortMu.Unlock()
+
+	cells, err := h.statsRepo.GetCohortMatrix(r.Context())
 	if err != nil {
-		return nil, err
+		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
 	}
-	if lastYear > 0 {
-		queue.SolvedLastYear = &lastYear
-		months := int(math.Ceil(float64(ahead) / (float64(lastYear) / 12.0)))
-		queue.EstimatedMonths = &months
-	}
-	return queue, nil
+
+	resp := buildCohortResponse(cells, time.Now())
+
+	h.cohortMu.Lock()
+	h.cohortCache = resp
+	h.cohortCacheAt = time.Now()
+	h.cohortMu.Unlock()
+
+	h.writeJSON(w, http.StatusOK, resp)
 }

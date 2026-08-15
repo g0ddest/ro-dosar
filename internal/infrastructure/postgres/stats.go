@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"ro-dosar/internal/repository"
@@ -87,36 +86,40 @@ func (r *StatsRepository) GetRecentActivity(ctx context.Context, since time.Time
 	return activity, rows.Err()
 }
 
-// CountAheadInQueue counts unsolved documents of the category registered
-// before the given document (earlier year, or same year with a smaller number)
-func (r *StatsRepository) CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error) {
+// GetCohortMatrix returns solved-dossier counts and number percentiles
+// grouped by category, registration year and solution year
+func (r *StatsRepository) GetCohortMatrix(ctx context.Context) ([]repository.CohortCell, error) {
 	query := `
-		SELECT COUNT(*)::int
+		SELECT category,
+		       EXTRACT(YEAR FROM registered_at)::int AS reg_year,
+		       split_part(solution_number, '/', 3)::int AS sol_year,
+		       COUNT(*)::int AS cnt,
+		       (percentile_cont(0.5) WITHIN GROUP
+		         (ORDER BY split_part(document_number, '/', 1)::int))::int AS p50,
+		       (percentile_cont(0.9) WITHIN GROUP
+		         (ORDER BY split_part(document_number, '/', 1)::int))::int AS p90
 		FROM documents
-		WHERE category = $1
-		  AND solution_number IS NULL
-		  AND (EXTRACT(YEAR FROM registered_at)::int < $2
-		       OR (EXTRACT(YEAR FROM registered_at)::int = $2
-		           AND split_part(document_number, '/', 1)::int < $3))
+		WHERE solution_number IS NOT NULL
+		  AND split_part(solution_number, '/', 3) ~ '^[0-9]{4}$'
+		  AND split_part(document_number, '/', 1) ~ '^[0-9]+$'
+		GROUP BY 1, 2, 3
+		ORDER BY 1, 2, 3
 	`
 
-	var count int
-	err := r.db.Pool.QueryRow(ctx, query, category, year, number).Scan(&count)
-	return count, err
-}
+	rows, err := r.db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-// CountSolvedInYear counts the category's documents whose solution_number
-// year segment equals the given year
-func (r *StatsRepository) CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error) {
-	query := `
-		SELECT COUNT(*)::int
-		FROM documents
-		WHERE category = $1
-		  AND solution_number IS NOT NULL
-		  AND split_part(solution_number, '/', 3) = $2
-	`
+	var cells []repository.CohortCell
+	for rows.Next() {
+		var c repository.CohortCell
+		if err := rows.Scan(&c.Category, &c.RegYear, &c.SolYear, &c.Count, &c.P50, &c.P90); err != nil {
+			return nil, err
+		}
+		cells = append(cells, c)
+	}
 
-	var count int
-	err := r.db.Pool.QueryRow(ctx, query, category, strconv.Itoa(solutionYear)).Scan(&count)
-	return count, err
+	return cells, rows.Err()
 }

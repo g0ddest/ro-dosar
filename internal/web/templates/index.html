@@ -329,24 +329,17 @@
                                 </svg>
                             </div>
                             <div class="min-w-0">
-                                <template x-if="document?.queue?.ahead === 0">
-                                    <p class="text-lg font-semibold text-blue-800 dark:text-blue-200" x-text="t('queueNextUp')"></p>
+                                <template x-if="document?.queue">
+                                    <p class="text-sm text-blue-700 dark:text-blue-300" x-text="t('queuePosition').replace('{n}', fmtNum(docNumber())).replace('{total}', fmtNum(document.queue.cohortTotal))"></p>
                                 </template>
-                                <template x-if="document?.queue?.ahead > 0">
-                                    <div>
-                                        <p class="text-lg font-semibold text-blue-800 dark:text-blue-200" x-text="'≈ ' + fmtNum(document.queue.ahead) + ' ' + t('queueAhead')"></p>
-                                        <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                                            <template x-if="document?.queue?.estimatedMonths && !document?.queue?.solvedLastYear">
-                                                <span x-text="'~' + fmtNum(document.queue.solvedLast90Days) + ' ' + t('queuePace').replace('{n}', stats?.activityWindowDays || 90) + ' · ' + t('queueEstimate') + ': ~' + document.queue.estimatedMonths + ' ' + t('queueMonths')"></span>
-                                            </template>
-                                            <template x-if="document?.queue?.estimatedMonths && document?.queue?.solvedLastYear">
-                                                <span x-text="'~' + fmtNum(document.queue.solvedLastYear) + ' ' + t('queuePaceLastYear') + ' · ' + t('queueEstimate') + ': ~' + document.queue.estimatedMonths + ' ' + t('queueMonths')"></span>
-                                            </template>
-                                            <template x-if="!document?.queue?.estimatedMonths">
-                                                <span x-text="t('queuePaceUnknown')"></span>
-                                            </template>
-                                        </p>
-                                    </div>
+                                <template x-if="document?.queue?.wavePassed">
+                                    <p class="text-base font-semibold text-blue-800 dark:text-blue-200 mt-1" x-text="t('queueWavePassed')"></p>
+                                </template>
+                                <template x-if="!document?.queue?.wavePassed && document?.queue?.estimatedMonthsMax">
+                                    <p class="text-lg font-semibold text-blue-800 dark:text-blue-200 mt-1" x-text="t('queueEstimate') + ': ' + fmtEta(document.queue.estimatedMonthsMin, document.queue.estimatedMonthsMax)"></p>
+                                </template>
+                                <template x-if="!document?.queue?.wavePassed && !document?.queue?.estimatedMonthsMax">
+                                    <p class="text-base font-semibold text-blue-800 dark:text-blue-200 mt-1" x-text="t('queueNoData')"></p>
                                 </template>
                                 <p class="text-xs text-blue-600/70 dark:text-blue-400/70 mt-2" x-text="t('queueDisclaimer')"></p>
                             </div>
@@ -751,14 +744,13 @@
                         lastNDays: 'Last {n} days',
                         solutions: 'solutions',
                         termChanges: 'term changes',
-                        queueAhead: 'dossiers ahead of you',
-                        queuePace: 'solutions in the last {n} days',
-                        queueEstimate: 'rough estimate',
-                        queueMonths: 'months',
-                        queueNextUp: 'You are next in line',
-                        queuePaceUnknown: 'Processing pace not yet known',
-                        queueDisclaimer: 'Linear estimate based on the current pace — not an official term',
-                        queuePaceLastYear: 'solutions last year'
+                        queuePosition: 'No. {n} of {total} in your year',
+                        queueEstimate: 'Estimated wait',
+                        queueMonthsUnit: 'months',
+                        queueYearsUnit: 'years',
+                        queueWavePassed: 'The processing wave has passed your number — the dossier is likely in the exception tail; check the term',
+                        queueNoData: 'Not enough data for an estimate',
+                        queueDisclaimer: 'Statistical estimate from historical data — not an official term'
                     },
                     ro: {
                         title: 'RO-DOSAR - Verificare Cetățenie',
@@ -790,14 +782,13 @@
                         lastNDays: 'Ultimele {n} zile',
                         solutions: 'soluții',
                         termChanges: 'termene modificate',
-                        queueAhead: 'dosare înaintea dvs.',
-                        queuePace: 'soluții în ultimele {n} zile',
-                        queueEstimate: 'estimare aproximativă',
-                        queueMonths: 'luni',
-                        queueNextUp: 'Sunteți următorul la rând',
-                        queuePaceUnknown: 'Ritmul de procesare nu este încă cunoscut',
-                        queueDisclaimer: 'Estimare liniară pe baza ritmului actual — nu este un termen oficial',
-                        queuePaceLastYear: 'soluții anul trecut'
+                        queuePosition: 'Nr. {n} din {total} în anul dvs.',
+                        queueEstimate: 'Așteptare estimată',
+                        queueMonthsUnit: 'luni',
+                        queueYearsUnit: 'ani',
+                        queueWavePassed: 'Valul de procesare a trecut de numărul dvs. — dosarul este probabil în coada de excepții; verificați termenul',
+                        queueNoData: 'Date insuficiente pentru estimare',
+                        queueDisclaimer: 'Estimare statistică pe date istorice — nu este un termen oficial'
                     }
                 },
 
@@ -928,6 +919,20 @@
                 isYourYear(cat, y) {
                     return this.document?.category?.code === cat.category.code
                         && this.docYear() === y.year;
+                },
+
+                docNumber() {
+                    if (!this.document?.documentNumber) return null;
+                    return parseInt(this.document.documentNumber.split('/')[0], 10);
+                },
+
+                fmtEta(min, max) {
+                    if (max <= 24) {
+                        return '≈ ' + min + '–' + max + ' ' + this.t('queueMonthsUnit');
+                    }
+                    const loc = this.lang === 'ro' ? 'ro-RO' : 'en-GB';
+                    const opts = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+                    return '≈ ' + (min / 12).toLocaleString(loc, opts) + '–' + (max / 12).toLocaleString(loc, opts) + ' ' + this.t('queueYearsUnit');
                 },
 
                 formatDate(dateStr) {

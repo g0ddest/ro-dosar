@@ -22,6 +22,10 @@ type Handler struct {
 	statsMu      sync.Mutex
 	statsCache   *StatsResponse
 	statsCacheAt time.Time
+
+	cohortMu      sync.Mutex
+	cohortCache   *CohortStatsResponse
+	cohortCacheAt time.Time
 }
 
 // NewHandler creates a new API handler
@@ -145,7 +149,7 @@ func (h *Handler) GetDocument(w http.ResponseWriter, r *http.Request) {
 
 	response := h.documentToResponse(doc, appointments)
 	if doc.SolutionNumber == nil {
-		if queue, err := h.buildQueueInfo(r.Context(), doc); err == nil {
+		if queue, err := h.buildQueueInfo(r.Context(), doc); err == nil && queue != nil {
 			response.Queue = queue
 		}
 	}
