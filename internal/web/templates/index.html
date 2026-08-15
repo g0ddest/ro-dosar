@@ -388,6 +388,82 @@
             </div>
         </div>
 
+        <!-- Processing Statistics -->
+        <div x-show="stats && stats.categories.length > 0" x-cloak class="mt-12">
+            <h3 class="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-4">
+                <svg class="w-6 h-6 text-ro-blue dark:text-ro-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+                <span x-text="t('statsTitle')"></span>
+            </h3>
+
+            <div class="space-y-4">
+                <template x-for="cat in stats.categories" :key="cat.category.code">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
+                        <!-- Card header -->
+                        <button @click="toggleCat(cat.category.code)" class="w-full flex items-center justify-between p-5 text-left">
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <span class="text-lg font-semibold text-slate-800 dark:text-white" x-text="getCategoryName(cat.category)"></span>
+                                <span class="text-sm text-slate-500 dark:text-slate-400" x-text="fmtNum(catTotal(cat)) + ' ' + t('dossiers')"></span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span
+                                    x-show="frontierYear(cat) !== null"
+                                    class="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 rounded-full text-sm font-medium whitespace-nowrap"
+                                    x-text="t('now') + ': ' + frontierYear(cat)"
+                                ></span>
+                                <svg class="w-5 h-5 text-slate-400 transition-transform" :class="{ 'rotate-180': expandedCat === cat.category.code }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </div>
+                        </button>
+
+                        <!-- Card body -->
+                        <div x-show="expandedCat === cat.category.code" x-cloak class="px-5 pb-5">
+                            <div class="space-y-3">
+                                <template x-for="y in cat.years" :key="y.year">
+                                    <div
+                                        class="rounded-lg p-2 -mx-2"
+                                        :class="{
+                                            'bg-amber-50 dark:bg-amber-900/20': frontierYear(cat) === y.year,
+                                            'ring-2 ring-ro-blue dark:ring-ro-yellow': isYourYear(cat, y)
+                                        }"
+                                    >
+                                        <div class="flex items-center justify-between gap-2 text-sm mb-1">
+                                            <span class="font-semibold text-slate-800 dark:text-white">
+                                                <span x-text="y.year"></span>
+                                                <span x-show="isYourYear(cat, y)" class="ml-1 text-ro-blue dark:text-ro-yellow font-medium" x-text="'· ' + t('yourYear')"></span>
+                                            </span>
+                                            <span class="text-slate-600 dark:text-slate-300 text-right">
+                                                <span x-text="fmtNum(y.solved) + ' ' + t('of') + ' ' + fmtNum(y.total) + ' (' + pct(y) + '%) ' + t('solvedLabel')"></span>
+                                                <span x-show="frontierYear(cat) === y.year" class="text-amber-600 dark:text-amber-400 font-medium" x-text="'← ' + t('currentlyHere')"></span>
+                                            </span>
+                                        </div>
+                                        <div class="h-2.5 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                            <div class="h-full bg-gradient-to-r from-ro-blue to-blue-500 dark:from-ro-yellow dark:to-amber-400 rounded-full transition-all" :style="'width:' + pct(y) + '%'"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Recent activity -->
+                            <div x-show="cat.recentActivity.length > 0" class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2" x-text="t('lastNDays').replace('{n}', stats.activityWindowDays)"></p>
+                                <div class="space-y-1">
+                                    <template x-for="a in cat.recentActivity" :key="a.year">
+                                        <div class="flex items-center justify-between text-sm">
+                                            <span class="font-medium text-slate-700 dark:text-slate-200" x-text="a.year"></span>
+                                            <span class="text-slate-600 dark:text-slate-300" x-text="(a.solved > 0 ? fmtNum(a.solved) + ' ' + t('solutions') : '') + (a.solved > 0 && a.termsSet > 0 ? ', ' : '') + (a.termsSet > 0 ? fmtNum(a.termsSet) + ' ' + t('termChanges') : '')"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
         <!-- Footer -->
         <footer class="mt-16 text-center text-slate-500 dark:text-slate-400 text-sm space-y-3">
             <p x-text="t('footer')"></p>
@@ -608,6 +684,8 @@
                 lang: localStorage.getItem('lang') || 'ro',
                 darkMode: localStorage.getItem('darkMode') === 'true',
                 recent: [],
+                stats: null,
+                expandedCat: null,
 
                 translations: {
                     en: {
@@ -629,7 +707,17 @@
                         error: 'An error occurred. Please try again.',
                         footer: 'Data sourced from the Romanian National Citizenship Authority',
                         recentSearches: 'Recent searches',
-                        clearAll: 'Clear all'
+                        clearAll: 'Clear all',
+                        statsTitle: 'Processing Statistics',
+                        dossiers: 'dossiers',
+                        now: 'now',
+                        of: 'of',
+                        solvedLabel: 'solved',
+                        currentlyHere: 'currently here',
+                        yourYear: 'your year',
+                        lastNDays: 'Last {n} days',
+                        solutions: 'solutions',
+                        termChanges: 'term changes'
                     },
                     ro: {
                         title: 'RO-DOSAR - Verificare Cetățenie',
@@ -650,12 +738,23 @@
                         error: 'A apărut o eroare. Vă rugăm încercați din nou.',
                         footer: 'Date preluate de la Autoritatea Națională pentru Cetățenie',
                         recentSearches: 'Căutări recente',
-                        clearAll: 'Șterge tot'
+                        clearAll: 'Șterge tot',
+                        statsTitle: 'Statistica procesării',
+                        dossiers: 'dosare',
+                        now: 'acum',
+                        of: 'din',
+                        solvedLabel: 'soluționate',
+                        currentlyHere: 'în lucru acum',
+                        yourYear: 'anul dvs.',
+                        lastNDays: 'Ultimele {n} zile',
+                        solutions: 'soluții',
+                        termChanges: 'termene modificate'
                     }
                 },
 
                 init() {
                     this.loadRecent();
+                    this.loadStats();
 
                     this.$watch('darkMode', (value) => {
                         localStorage.setItem('darkMode', value);
@@ -721,6 +820,62 @@
                     this.search();
                 },
 
+                async loadStats() {
+                    try {
+                        const response = await fetch('/api/v1/stats');
+                        if (!response.ok) throw new Error('stats request failed: ' + response.status);
+                        this.stats = await response.json();
+                    } catch (err) {
+                        console.error(err);
+                        this.stats = null;
+                    }
+                },
+
+                toggleCat(code) {
+                    this.expandedCat = this.expandedCat === code ? null : code;
+                },
+
+                catTotal(cat) {
+                    return cat.years.reduce((sum, y) => sum + y.total, 0);
+                },
+
+                pct(y) {
+                    return y.total > 0 ? Math.round((y.solved / y.total) * 100) : 0;
+                },
+
+                fmtNum(n) {
+                    return n.toLocaleString(this.lang === 'ro' ? 'ro-RO' : 'en-GB');
+                },
+
+                // Frontier: among years with recent solved > 0 pick max count
+                // (years ascending, strict > keeps the earliest on ties);
+                // fallback: earliest year with solved share in [5%, 95%)
+                frontierYear(cat) {
+                    const active = (cat.recentActivity || []).filter(a => a.solved > 0);
+                    if (active.length > 0) {
+                        let best = active[0];
+                        for (const a of active) {
+                            if (a.solved > best.solved) best = a;
+                        }
+                        return best.year;
+                    }
+                    for (const y of cat.years) {
+                        const share = y.total > 0 ? y.solved / y.total : 0;
+                        if (share >= 0.05 && share < 0.95) return y.year;
+                    }
+                    return null;
+                },
+
+                docYear() {
+                    if (!this.document?.registeredAt) return null;
+                    return new Date(this.document.registeredAt).getFullYear();
+                },
+
+                isYourYear(cat, y) {
+                    return this.document?.category?.code === cat.category.code
+                        && this.docYear() === y.year;
+                },
+
                 formatDate(dateStr) {
                     if (!dateStr) return '';
                     const date = new Date(dateStr);
@@ -747,6 +902,7 @@
                     this.loading = true;
                     this.error = null;
                     this.document = null;
+                    this.expandedCat = null;
 
                     try {
                         // Parse document number
@@ -772,6 +928,7 @@
 
                         this.document = await response.json();
                         this.addRecent(this.document);
+                        this.expandedCat = this.document.category.code;
 
                         // Update URL
                         const url = new URL(window.location);
