@@ -55,9 +55,7 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			continue
 		}
 
-		if err := workflow.ExecuteActivity(ctx, activities.SaveOrdine, activity.SaveOrdineInput{
-			Ordins: extractOutput.Ordins,
-		}).Get(ctx, nil); err != nil {
+		if err := workflow.ExecuteActivity(ctx, activities.SaveOrdine, activity.SaveOrdineInput(extractOutput)).Get(ctx, nil); err != nil {
 			logger.Error("Ordine save failed", "url", pageURL, "error", err)
 			output.Failed = append(output.Failed, pageURL)
 			continue
