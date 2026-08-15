@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,13 +17,19 @@ import (
 type Handler struct {
 	documentRepo    repository.DocumentRepository
 	appointmentRepo repository.AppointmentRepository
+	statsRepo       repository.StatsRepository
+
+	statsMu      sync.Mutex
+	statsCache   *StatsResponse
+	statsCacheAt time.Time
 }
 
 // NewHandler creates a new API handler
-func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repository.AppointmentRepository) *Handler {
+func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repository.AppointmentRepository, statsRepo repository.StatsRepository) *Handler {
 	return &Handler{
 		documentRepo:    documentRepo,
 		appointmentRepo: appointmentRepo,
+		statsRepo:       statsRepo,
 	}
 }
 

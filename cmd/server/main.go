@@ -95,9 +95,10 @@ func main() {
 	// Initialize repositories
 	documentRepo := postgres.NewDocumentRepository(db)
 	appointmentRepo := postgres.NewAppointmentRepository(db)
+	statsRepo := postgres.NewStatsRepository(db)
 
 	// Initialize API handler
-	apiHandler := api.NewHandler(documentRepo, appointmentRepo)
+	apiHandler := api.NewHandler(documentRepo, appointmentRepo, statsRepo)
 	apiRouter := api.NewRouter(apiHandler)
 
 	// Initialize Web handler (SPA)
