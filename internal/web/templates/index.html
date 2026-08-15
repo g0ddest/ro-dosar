@@ -398,7 +398,7 @@
             </h3>
 
             <div class="space-y-4">
-                <template x-for="cat in stats.categories" :key="cat.category.code">
+                <template x-for="cat in (stats?.categories || [])" :key="cat.category.code">
                     <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl overflow-hidden">
                         <!-- Card header -->
                         <button @click="toggleCat(cat.category.code)" class="w-full flex items-center justify-between p-5 text-left">
