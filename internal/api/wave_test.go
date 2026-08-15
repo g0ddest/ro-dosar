@@ -51,10 +51,12 @@ func TestWave_RateCorrectionLowPercentile(t *testing.T) {
 	if q == nil || q.WavePassed {
 		t.Fatalf("expected estimate: %+v", q)
 	}
-	// tCurve ~ 4.0 months (<= 12) -> rate correction with R90 = 556:
-	// tRate = (0.0823 - 0.0227) * 45764 / (556/3) = 14.72 months -> range [11, 20]
-	if q.EstimatedMonthsMin == nil || *q.EstimatedMonthsMin != 11 || *q.EstimatedMonthsMax != 20 {
-		t.Errorf("expected [11, 20], got %+v", q)
+	// tCurve ~ 4.0 months; rate floor with R90 = 556:
+	// tRate = (0.0823 - 0.0227) * 45764 / (556/3) = 14.72 months, but the floor
+	// saturates at waveRateWindowMonth (12) -> rateFloor = min(14.72, 12) = 12
+	// -> t = max(4.0, 12) = 12 -> range [floor(0.8*12), ceil(1.3*12)] = [9, 16]
+	if q.EstimatedMonthsMin == nil || *q.EstimatedMonthsMin != 9 || *q.EstimatedMonthsMax != 16 {
+		t.Errorf("expected [9, 16], got %+v", q)
 	}
 }
 
@@ -131,5 +133,16 @@ func TestWave_CensoringExcludesOldYears(t *testing.T) {
 	cut := buildWaveEstimate(trimmed, 2024, 39946, fixtureNow)
 	if *full.EstimatedMonthsMin != *cut.EstimatedMonthsMin || *full.EstimatedMonthsMax != *cut.EstimatedMonthsMax {
 		t.Errorf("censoring must neutralize pre-2015 phantoms: full=%+v cut=%+v", full, cut)
+	}
+}
+
+func TestWave_MonotoneAcrossRateBoundary(t *testing.T) {
+	lo := buildWaveEstimate(art11Fixture(), 2024, 12199, fixtureNow)
+	hi := buildWaveEstimate(art11Fixture(), 2024, 12222, fixtureNow)
+	if lo == nil || hi == nil || lo.EstimatedMonthsMax == nil || hi.EstimatedMonthsMax == nil {
+		t.Fatalf("expected estimates: %+v %+v", lo, hi)
+	}
+	if *hi.EstimatedMonthsMin < *lo.EstimatedMonthsMin || *hi.EstimatedMonthsMax < *lo.EstimatedMonthsMax {
+		t.Errorf("estimate must be monotone in the number: lo=%+v hi=%+v", lo, hi)
 	}
 }

@@ -160,20 +160,21 @@ func buildWaveEstimate(cat CategoryStatsResponse, docYear, docNumber int, now ti
 	}
 
 	t := math.Max(0, (float64(docYear)+0.5+aStar)-nowFrac) * 12
-	if t <= waveRateWindowMonth {
-		r90 := 0
-		for _, a := range cat.RecentActivity {
-			if a.Year == docYear {
-				r90 = a.Solved
-				break
-			}
+
+	r90 := 0
+	for _, a := range cat.RecentActivity {
+		if a.Year == docYear {
+			r90 = a.Solved
+			break
 		}
-		if r90 > 0 {
-			tRate := (target - cohortShare) * float64(cohort.Total) / (float64(r90) / 3.0)
-			if tRate > t {
-				t = tRate
-			}
-		}
+	}
+	rateFloor := waveRateWindowMonth
+	if r90 > 0 {
+		tRate := (target - cohortShare) * float64(cohort.Total) / (float64(r90) / 3.0)
+		rateFloor = math.Min(tRate, waveRateWindowMonth)
+	}
+	if rateFloor > t {
+		t = rateFloor
 	}
 
 	minM := int(math.Max(1, math.Floor(waveRangeLow*t)))
