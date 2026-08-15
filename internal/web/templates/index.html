@@ -687,7 +687,7 @@
                         tlNoticed: 'noticed on {date}',
                         tlOrdin: 'Order published: {num}',
                         tlOrdinFuture: 'Order publication',
-                        tlOathInvitation: 'Oath invitation',
+                        tlInterviewInvitation: 'Interview invitation',
                         tlResult: 'Result: {result}',
                         tlInExam: 'Dossier under examination',
                         tlInExamDesc: 'The National Citizenship Authority is verifying that the legal requirements are met',
@@ -740,7 +740,7 @@
                         tlNoticed: 'observat la {date}',
                         tlOrdin: 'Ordin publicat: {num}',
                         tlOrdinFuture: 'Publicare ordin',
-                        tlOathInvitation: 'Invitație la jurământ',
+                        tlInterviewInvitation: 'Invitație la interviu',
                         tlResult: 'Rezultat: {result}',
                         tlInExam: 'Dosarul este în examinare',
                         tlInExamDesc: 'Autoritatea Națională pentru Cetățenie verifică îndeplinirea condițiilor prevăzute de lege',
@@ -896,24 +896,27 @@
 
                 timelineNodes() {
                     if (!this.document) return [];
-                    const nodes = [];
+                    const facts = [];
+                    let seq = 0;
+                    const push = (key, node) => facts.push({ key: key || '', seq: seq++, node });
+
                     for (const ev of (this.document.timeline || [])) {
                         if (ev.type === 'REGISTERED') {
-                            nodes.push({ state: 'done', title: this.t('tlRegistered'), subtitle: this.formatDate(ev.date) });
+                            push(ev.date, { state: 'done', title: this.t('tlRegistered'), subtitle: this.formatDate(ev.date) });
                         } else if (ev.type === 'TERM_SET') {
-                            nodes.push({
+                            push(ev.noticedAt || this.document.registeredAt, {
                                 state: 'done',
                                 title: this.t('tlTermSet').replace('{term}', this.formatDate(ev.term)),
                                 subtitle: ev.noticedAt ? this.t('tlNoticed').replace('{date}', this.formatDate(ev.noticedAt)) : null
                             });
                         } else if (ev.type === 'TERM_CHANGED') {
-                            nodes.push({
+                            push(ev.noticedAt, {
                                 state: 'done',
                                 title: this.t('tlTermChanged').replace('{prev}', this.formatDate(ev.prevTerm)).replace('{term}', this.formatDate(ev.term)),
                                 subtitle: ev.noticedAt ? this.t('tlNoticed').replace('{date}', this.formatDate(ev.noticedAt)) : null
                             });
                         } else if (ev.type === 'SOLUTION_PUBLISHED') {
-                            nodes.push({
+                            push(ev.date || ev.noticedAt || '9999-12-31', {
                                 state: 'done',
                                 title: this.t('tlOrdin').replace('{num}', ev.solutionNumber || ''),
                                 subtitle: ev.date ? this.formatDate(ev.date) : null,
@@ -922,7 +925,19 @@
                         }
                     }
 
+                    for (const apt of (this.document.appointments || [])) {
+                        if (apt.type === 'INVITATION') {
+                            push(apt.date, { state: 'done', title: this.t('tlInterviewInvitation'), subtitle: this.formatDate(apt.date) + (apt.time ? ' · ' + apt.time : '') });
+                        } else {
+                            push(apt.date, { state: 'done', title: this.t('tlResult').replace('{result}', apt.result || ''), subtitle: this.formatDate(apt.date) });
+                        }
+                    }
+
+                    facts.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.seq - b.seq));
+                    const nodes = facts.map(f => f.node);
+
                     if (!this.document.solutionNumber) {
+                        nodes.push({ state: 'current', title: this.t('tlInExam'), subtitle: this.t('tlInExamDesc') });
                         const q = this.document.queue;
                         let subtitle = null, extra = null, disclaimer = null;
                         if (q) {
@@ -932,18 +947,9 @@
                             else subtitle = this.t('queueNoData');
                             disclaimer = this.t('queueDisclaimer');
                         }
-                        nodes.push({ state: 'current', title: this.t('tlInExam'), subtitle: this.t('tlInExamDesc') });
                         nodes.push({ state: 'projected', title: this.t('tlOrdinFuture'), subtitle, extra, disclaimer });
                         nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfo'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
                     } else {
-                        const apts = this.document.appointments || [];
-                        for (const apt of apts) {
-                            if (apt.type === 'INVITATION') {
-                                nodes.push({ state: 'done', title: this.t('tlOathInvitation'), subtitle: this.formatDate(apt.date) + (apt.time ? ' · ' + apt.time : '') });
-                            } else {
-                                nodes.push({ state: 'done', title: this.t('tlResult').replace('{result}', apt.result || ''), subtitle: this.formatDate(apt.date) });
-                            }
-                        }
                         nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfoSolved'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
                     }
                     return nodes;
