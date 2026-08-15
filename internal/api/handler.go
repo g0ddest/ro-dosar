@@ -49,6 +49,7 @@ type DocumentResponse struct {
 	Term           *string               `json:"term,omitempty"`
 	SolutionNumber *string               `json:"solutionNumber,omitempty"`
 	Appointments   []AppointmentResponse `json:"appointments,omitempty"`
+	Queue          *QueueResponse        `json:"queue,omitempty"`
 }
 
 // AppointmentResponse represents an appointment in API responses
@@ -143,6 +144,11 @@ func (h *Handler) GetDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := h.documentToResponse(doc, appointments)
+	if doc.SolutionNumber == nil {
+		if queue, err := h.buildQueueInfo(r.Context(), doc); err == nil {
+			response.Queue = queue
+		}
+	}
 	h.writeJSON(w, http.StatusOK, response)
 }
 

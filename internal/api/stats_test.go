@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
+	"ro-dosar/internal/domain"
 	"ro-dosar/internal/repository"
 )
 
@@ -20,6 +23,8 @@ type MockStatsRepository struct {
 	activityErr   error
 	yearlyCalls   int
 	activityCalls int
+	aheadCount    int
+	aheadErr      error
 }
 
 func (r *MockStatsRepository) GetYearlyStats(ctx context.Context) ([]repository.CategoryYearStats, error) {
@@ -30,6 +35,10 @@ func (r *MockStatsRepository) GetYearlyStats(ctx context.Context) ([]repository.
 func (r *MockStatsRepository) GetRecentActivity(ctx context.Context, since time.Time) ([]repository.CategoryYearActivity, error) {
 	r.activityCalls++
 	return r.activity, r.activityErr
+}
+
+func (r *MockStatsRepository) CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error) {
+	return r.aheadCount, r.aheadErr
 }
 
 func newStatsHandler(statsRepo repository.StatsRepository) *Handler {
@@ -160,5 +169,126 @@ func TestGetStats_RepositoryError(t *testing.T) {
 	}
 	if errResp.Status != http.StatusInternalServerError || errResp.Title == "" {
 		t.Errorf("malformed RFC 7807 error: %+v", errResp)
+	}
+}
+
+func doDocumentRequest(t *testing.T, handler *Handler, number, category, year string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/documents/"+number+"/"+category+"/"+year, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("number", number)
+	rctx.URLParams.Add("category", category)
+	rctx.URLParams.Add("year", year)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rec := httptest.NewRecorder()
+	handler.GetDocument(rec, req)
+	return rec
+}
+
+func newQueueDocument(t *testing.T, numStr string, registered time.Time, cat string, solved bool) *MockDocumentRepository {
+	t.Helper()
+	docNum, err := domain.ParseDocumentNumber(numStr)
+	if err != nil {
+		t.Fatalf("bad document number: %v", err)
+	}
+	doc := domain.NewDocument(docNum, registered, domain.Category(cat))
+	if solved {
+		sol, _ := domain.ParseDocumentNumber("1/P/2026")
+		doc.SetSolutionNumber(sol)
+	}
+	repo := NewMockDocumentRepository()
+	_ = repo.Save(context.Background(), doc)
+	return repo
+}
+
+func TestGetDocument_QueueForUnsolved(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{
+		aheadCount: 4210,
+		// yearly rows are required: buildStatsResponse only keeps categories
+		// that have yearly stats, and buildQueueInfo reads pace from that response
+		yearly: []repository.CategoryYearStats{
+			{Category: "ART_10", Year: 2021, Total: 100, Solved: 50, WithTerm: 60},
+			{Category: "ART_10", Year: 2022, Total: 100, Solved: 10, WithTerm: 20},
+			{Category: "ART_8", Year: 2022, Total: 10, Solved: 5, WithTerm: 5},
+		},
+		activity: []repository.CategoryYearActivity{
+			{Category: "ART_10", Year: 2021, Solved: 50},
+			{Category: "ART_10", Year: 2022, Solved: 900},
+			{Category: "ART_8", Year: 2022, Solved: 999}, // other category: excluded
+		},
+	}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Queue == nil {
+		t.Fatal("expected queue block for unsolved document")
+	}
+	if resp.Queue.Ahead != 4210 || resp.Queue.SolvedLast90Days != 950 {
+		t.Errorf("wrong queue counts: %+v", resp.Queue)
+	}
+	// ceil(4210 / (950/3)) = ceil(13.29) = 14
+	if resp.Queue.EstimatedMonths == nil || *resp.Queue.EstimatedMonths != 14 {
+		t.Errorf("expected estimatedMonths 14, got %+v", resp.Queue.EstimatedMonths)
+	}
+}
+
+func TestGetDocument_QueuePaceUnknown(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{aheadCount: 77}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Queue == nil || resp.Queue.Ahead != 77 || resp.Queue.SolvedLast90Days != 0 {
+		t.Fatalf("wrong queue: %+v", resp.Queue)
+	}
+	if resp.Queue.EstimatedMonths != nil {
+		t.Error("expected estimatedMonths omitted when pace is 0")
+	}
+	if strings.Contains(rec.Body.String(), "estimatedMonths") {
+		t.Error("estimatedMonths must be absent from JSON when pace is 0")
+	}
+}
+
+func TestGetDocument_NoQueueForSolved(t *testing.T) {
+	docRepo := newQueueDocument(t, "101/A/2021", time.Date(2021, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", true)
+	statsRepo := &MockStatsRepository{aheadCount: 4210}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "101", "A", "2021")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `"queue"`) {
+		t.Error("solved document must not carry a queue block")
+	}
+}
+
+func TestGetDocument_QueueErrorNonFatal(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{aheadErr: context.DeadlineExceeded}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("queue error must not fail the document request, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `"queue"`) {
+		t.Error("queue must be absent when its computation fails")
 	}
 }

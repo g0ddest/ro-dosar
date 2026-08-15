@@ -108,7 +108,7 @@ func TestGetDocument(t *testing.T) {
 	apt.SetResult(result)
 	aptRepo.Save(context.Background(), apt)
 
-	handler := NewHandler(docRepo, aptRepo, nil)
+	handler := NewHandler(docRepo, aptRepo, &MockStatsRepository{})
 	router := chi.NewRouter()
 	router.Get("/documents/{number}/{category}/{year}", handler.GetDocument)
 
