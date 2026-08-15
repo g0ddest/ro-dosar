@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"math"
 	"net/http"
 	"sort"
 	"time"
@@ -59,6 +61,13 @@ type StatsResponse struct {
 	GeneratedAt        string                  `json:"generatedAt"`
 	ActivityWindowDays int                     `json:"activityWindowDays"`
 	Categories         []CategoryStatsResponse `json:"categories"`
+}
+
+// QueueResponse describes an unsolved document's position in its category queue
+type QueueResponse struct {
+	Ahead            int  `json:"ahead"`
+	SolvedLast90Days int  `json:"solvedLast90Days"`
+	EstimatedMonths  *int `json:"estimatedMonths,omitempty"`
 }
 
 // buildStatsResponse assembles the stats payload: fixed category order,
@@ -121,28 +130,25 @@ func buildStatsResponse(yearly []repository.CategoryYearStats, activity []reposi
 	return resp
 }
 
-// GetStats handles GET /api/v1/stats
-func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
+// getStatsCached returns the cached stats response, recomputing it when stale
+func (h *Handler) getStatsCached(ctx context.Context) (*StatsResponse, error) {
 	h.statsMu.Lock()
 	if h.statsCache != nil && time.Since(h.statsCacheAt) < statsCacheTTL {
 		cached := h.statsCache
 		h.statsMu.Unlock()
-		h.writeJSON(w, http.StatusOK, cached)
-		return
+		return cached, nil
 	}
 	h.statsMu.Unlock()
 
-	yearly, err := h.statsRepo.GetYearlyStats(r.Context())
+	yearly, err := h.statsRepo.GetYearlyStats(ctx)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
+		return nil, err
 	}
 
 	since := time.Now().AddDate(0, 0, -activityWindowDays)
-	activity, err := h.statsRepo.GetRecentActivity(r.Context(), since)
+	activity, err := h.statsRepo.GetRecentActivity(ctx, since)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
+		return nil, err
 	}
 
 	resp := buildStatsResponse(yearly, activity, time.Now())
@@ -152,5 +158,45 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	h.statsCacheAt = time.Now()
 	h.statsMu.Unlock()
 
+	return resp, nil
+}
+
+// GetStats handles GET /api/v1/stats
+func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.getStatsCached(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
 	h.writeJSON(w, http.StatusOK, resp)
+}
+
+// buildQueueInfo computes an unsolved document's queue position and a rough
+// linear estimate from the recent processing pace
+func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*QueueResponse, error) {
+	ahead, err := h.statsRepo.CountAheadInQueue(ctx, doc.Category.String(), doc.RegisteredAt.Year(), doc.DocumentNumber.Number)
+	if err != nil {
+		return nil, err
+	}
+
+	stats, err := h.getStatsCached(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	solved90 := 0
+	for _, cat := range stats.Categories {
+		if cat.Category.Code == doc.Category.String() {
+			for _, a := range cat.RecentActivity {
+				solved90 += a.Solved
+			}
+		}
+	}
+
+	queue := &QueueResponse{Ahead: ahead, SolvedLast90Days: solved90}
+	if solved90 > 0 {
+		months := int(math.Ceil(float64(ahead) / (float64(solved90) / 3.0)))
+		queue.EstimatedMonths = &months
+	}
+	return queue, nil
 }
