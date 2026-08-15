@@ -299,3 +299,37 @@ func ExtractOrdinLinks(htmlContent, baseURL string) (links []OrdinLink, pdfAncho
 
 	return links, pdfAnchors, nil
 }
+
+var oathAnchorPattern = regexp.MustCompile(`(?i)jur[aă]m[aâ]nt`)
+
+// ExtractOathListLinks extracts oath-schedule PDF links from the /juramant/
+// page: anchors ending .pdf whose text mentions the oath
+func ExtractOathListLinks(htmlContent, baseURL string) ([]string, error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
+	if err != nil {
+		return nil, err
+	}
+
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var links []string
+	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
+		href := strings.TrimSpace(s.AttrOr("href", ""))
+		if !strings.HasSuffix(strings.ToLower(href), ".pdf") {
+			return
+		}
+		if !oathAnchorPattern.MatchString(s.Text()) {
+			return
+		}
+		ref, err := url.Parse(href)
+		if err != nil {
+			return
+		}
+		links = append(links, base.ResolveReference(ref).String())
+	})
+
+	return links, nil
+}

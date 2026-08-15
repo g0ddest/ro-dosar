@@ -79,8 +79,21 @@ func (b *BrowserClient) Close() {
 	b.initialized = false
 }
 
-// FetchPage fetches an HTML page using headless Chrome
+// FetchPage fetches an HTML page, waiting until a PDF link is visible
 func (b *BrowserClient) FetchPage(ctx context.Context, url string) ([]byte, string, error) {
+	return b.fetchPage(ctx, url, chromedp.WaitVisible("a[href$='.pdf']", chromedp.ByQuery))
+}
+
+// FetchPageDOM fetches an HTML page, waiting only until a PDF link is present
+// in the DOM — some listing pages keep their links inside collapsed sections
+// that never become visible
+func (b *BrowserClient) FetchPageDOM(ctx context.Context, url string) ([]byte, string, error) {
+	return b.fetchPage(ctx, url, chromedp.WaitReady("a[href$='.pdf']", chromedp.ByQuery))
+}
+
+// fetchPage fetches an HTML page using headless Chrome, blocking on wait
+// before capturing the page's outer HTML
+func (b *BrowserClient) fetchPage(ctx context.Context, url string, wait chromedp.Action) ([]byte, string, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -95,7 +108,7 @@ func (b *BrowserClient) FetchPage(ctx context.Context, url string) ([]byte, stri
 	var html string
 	err := chromedp.Run(timeoutCtx,
 		chromedp.Navigate(url),
-		chromedp.WaitVisible("a[href$='.pdf']", chromedp.ByQuery),
+		wait,
 		chromedp.OuterHTML("html", &html),
 	)
 	if err != nil {

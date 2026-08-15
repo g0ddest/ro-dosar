@@ -86,6 +86,10 @@ func main() {
 	w.RegisterActivity(activities.SaveAppointment)
 	w.RegisterActivity(activities.ExtractOrdine)
 	w.RegisterActivity(activities.SaveOrdine)
+	w.RegisterActivity(activities.ExtractOathLinks)
+	w.RegisterActivity(activities.ParseOathListPDF)
+	w.RegisterActivity(activities.SaveOathSchedule)
+	w.RegisterActivity(activities.DeletePDFContent)
 
 	// Start worker in background
 	go func() {
@@ -101,9 +105,10 @@ func main() {
 	statsRepo := postgres.NewStatsRepository(db)
 	auditRepo := postgres.NewDocumentAuditRepository(db)
 	ordinRepo := postgres.NewOrdinRepository(db)
+	oathRepo := postgres.NewOathRepository(db)
 
 	// Initialize API handler
-	apiHandler := api.NewHandler(documentRepo, appointmentRepo, statsRepo, auditRepo, ordinRepo)
+	apiHandler := api.NewHandler(documentRepo, appointmentRepo, statsRepo, auditRepo, ordinRepo, oathRepo)
 	apiRouter := api.NewRouter(apiHandler)
 
 	// Initialize Web handler (SPA)

@@ -20,6 +20,7 @@ type Handler struct {
 	statsRepo       repository.StatsRepository
 	auditRepo       repository.DocumentAuditRepository
 	ordinRepo       repository.OrdinRepository
+	oathRepo        repository.OathRepository
 
 	statsMu      sync.Mutex
 	statsCache   *StatsResponse
@@ -31,13 +32,14 @@ type Handler struct {
 }
 
 // NewHandler creates a new API handler
-func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repository.AppointmentRepository, statsRepo repository.StatsRepository, auditRepo repository.DocumentAuditRepository, ordinRepo repository.OrdinRepository) *Handler {
+func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repository.AppointmentRepository, statsRepo repository.StatsRepository, auditRepo repository.DocumentAuditRepository, ordinRepo repository.OrdinRepository, oathRepo repository.OathRepository) *Handler {
 	return &Handler{
 		documentRepo:    documentRepo,
 		appointmentRepo: appointmentRepo,
 		statsRepo:       statsRepo,
 		auditRepo:       auditRepo,
 		ordinRepo:       ordinRepo,
+		oathRepo:        oathRepo,
 	}
 }
 
@@ -59,6 +61,14 @@ type DocumentResponse struct {
 	Appointments   []AppointmentResponse   `json:"appointments,omitempty"`
 	Queue          *QueueResponse          `json:"queue,omitempty"`
 	Timeline       []TimelineEventResponse `json:"timeline"`
+	Oath           *OathResponse           `json:"oath,omitempty"`
+}
+
+// OathResponse is a scheduled oath ceremony for a solved dossier
+type OathResponse struct {
+	Date    string  `json:"date"`
+	Time    *string `json:"time,omitempty"`
+	ListURL string  `json:"listUrl"`
 }
 
 // AppointmentResponse represents an appointment in API responses
@@ -159,6 +169,15 @@ func (h *Handler) GetDocument(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	response.Timeline = h.buildDocumentTimeline(r.Context(), doc)
+	if doc.SolutionNumber != nil {
+		if oath, err := h.oathRepo.GetByDossier(r.Context(), doc.DocumentNumber.Number, doc.DocumentNumber.Year); err == nil && oath != nil {
+			response.Oath = &OathResponse{
+				Date:    oath.Date.Format("2006-01-02"),
+				Time:    oath.Time,
+				ListURL: oath.ListURL,
+			}
+		}
+	}
 	h.writeJSON(w, http.StatusOK, response)
 }
 

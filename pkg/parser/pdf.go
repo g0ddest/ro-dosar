@@ -406,3 +406,61 @@ func ParseDateFromFilename(filename string) *time.Time {
 	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 	return &date
 }
+
+// OathEntry is one dossier scheduled for the oath (no category letter in the lists)
+type OathEntry struct {
+	Number int
+	Year   int
+}
+
+// OathList is one parsed oath-schedule PDF
+type OathList struct {
+	Date    time.Time
+	Time    *string // "15:04" format, nil when the header carries no hour
+	Entries []OathEntry
+}
+
+var (
+	oathDatePattern  = regexp.MustCompile(`LA DATA DE\s+(\d{1,2})\.(\d{1,2})\.(\d{4})`)
+	oathHourPattern  = regexp.MustCompile(`ORA\s+(\d{1,2})[.:](\d{2})`)
+	oathEntryPattern = regexp.MustCompile(`(?m)^\s*\d+\.?\s+(\d+)/(\d{4})\s*$`)
+)
+
+// ParseOathList parses the text of an oath-schedule PDF: the header carries
+// the ceremony date (mandatory) and hour (optional), the table rows carry
+// dossier numbers without a category letter; duplicates are family members
+// sharing one dossier and are deduplicated
+func ParseOathList(text string) (*OathList, error) {
+	d := oathDatePattern.FindStringSubmatch(text)
+	if d == nil {
+		return nil, fmt.Errorf("oath list has no ceremony date")
+	}
+	day, _ := strconv.Atoi(d[1])
+	month, _ := strconv.Atoi(d[2])
+	year, _ := strconv.Atoi(d[3])
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return nil, fmt.Errorf("oath list has an invalid ceremony date: %s", d[0])
+	}
+
+	list := &OathList{Date: time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)}
+
+	if h := oathHourPattern.FindStringSubmatch(text); h != nil {
+		hh, _ := strconv.Atoi(h[1])
+		t := fmt.Sprintf("%02d:%s", hh, h[2])
+		list.Time = &t
+	}
+
+	seen := map[OathEntry]bool{}
+	for _, m := range oathEntryPattern.FindAllStringSubmatch(text, -1) {
+		number, _ := strconv.Atoi(m[1])
+		entryYear, _ := strconv.Atoi(m[2])
+		e := OathEntry{Number: number, Year: entryYear}
+		if seen[e] {
+			continue
+		}
+		seen[e] = true
+		list.Entries = append(list.Entries, e)
+	}
+
+	return list, nil
+}

@@ -237,3 +237,24 @@ func TestExtractOrdinLinks(t *testing.T) {
 		t.Errorf("wrong NBSP/single-digit-date link: %+v", last)
 	}
 }
+
+func TestExtractOathListLinks(t *testing.T) {
+	html := `
+	<html><body>
+	<a href="/wp-content/uploads/2026/08/tabel-afisare-site-12.08.2026-ora-9.00.pdf">Lista persoanelor programate pentru depunerea jurământului, la sediul ANC București – 12.08.2026</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2026/08/11-AUGUST-ORA-1400i.pdf">Lista persoanelor programate pentru depunerea juramantului – 11.08.2026</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2026/08/alt-document.pdf">Program de audiențe</a>
+	<a href="https://cetatenie.just.ro/juramant/detalii/">Lista persoanelor programate pentru depunerea jurământului</a>
+	</body></html>`
+
+	links, err := ExtractOathListLinks(html, "https://cetatenie.just.ro/juramant/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 2 {
+		t.Fatalf("expected 2 links (non-oath text and non-pdf skipped), got %d: %v", len(links), links)
+	}
+	if links[0] != "https://cetatenie.just.ro/wp-content/uploads/2026/08/tabel-afisare-site-12.08.2026-ora-9.00.pdf" {
+		t.Errorf("relative href must resolve: %s", links[0])
+	}
+}

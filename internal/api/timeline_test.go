@@ -133,7 +133,7 @@ func TestGetDocument_TimelinePresentAndDegrades(t *testing.T) {
 	// full path: solved doc + audit error -> synthesized timeline, still 200
 	docRepo := newQueueDocument(t, "101/A/2021", time.Date(2021, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", true)
 	handler := NewHandler(docRepo, NewMockAppointmentRepository(), &MockStatsRepository{},
-		&MockAuditRepository{eventsErr: context.DeadlineExceeded}, &MockOrdinRepository{})
+		&MockAuditRepository{eventsErr: context.DeadlineExceeded}, &MockOrdinRepository{}, &MockOathRepository{})
 
 	rec := doDocumentRequest(t, handler, "101", "A", "2021")
 
