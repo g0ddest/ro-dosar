@@ -166,6 +166,41 @@
             </form>
         </div>
 
+        <!-- Recent Searches -->
+        <div x-show="recent.length > 0" x-cloak class="mb-8">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide" x-text="t('recentSearches')"></h3>
+                <button
+                    @click="clearRecent()"
+                    class="text-sm text-slate-400 hover:text-ro-blue dark:hover:text-ro-yellow underline transition-colors"
+                    x-text="t('clearAll')"
+                ></button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <template x-for="entry in recent" :key="entry.num">
+                    <div class="inline-flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pl-3 pr-1 py-1 shadow-sm">
+                        <button
+                            @click="searchRecent(entry.num)"
+                            class="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:text-ro-blue dark:hover:text-ro-yellow transition-colors"
+                        >
+                            <svg x-show="entry.solved" class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span x-text="entry.num"></span>
+                        </button>
+                        <button
+                            @click="removeRecent(entry.num)"
+                            class="p-1 text-slate-400 hover:text-red-500 rounded-full transition-colors"
+                        >
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </div>
+
         <!-- Error Message -->
         <div
             x-show="error"
@@ -526,7 +561,7 @@
                     <!-- Local Storage -->
                     <div>
                         <h4 class="font-semibold text-slate-800 dark:text-white mb-2" x-text="lang === 'ro' ? 'Stocare locală' : 'Local Storage'"></h4>
-                        <p class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed" x-text="lang === 'ro' ? 'Stocăm doar preferințele dvs. de limbă și temă (mod întunecat) în browserul dvs. local. Aceste date nu sunt transmise nicăieri.' : 'We only store your language and theme (dark mode) preferences in your local browser. This data is not transmitted anywhere.'"></p>
+                        <p class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed" x-text="lang === 'ro' ? 'Stocăm doar preferințele dvs. de limbă și temă (mod întunecat) și numerele de dosar vizualizate recent în browserul dvs. local. Aceste date nu sunt transmise nicăieri.' : 'We only store your language and theme (dark mode) preferences and your recently viewed document numbers in your local browser. This data is not transmitted anywhere.'"></p>
                     </div>
 
                     <!-- No Cookies -->
@@ -572,6 +607,7 @@
                 showPrivacyModal: false,
                 lang: localStorage.getItem('lang') || 'ro',
                 darkMode: localStorage.getItem('darkMode') === 'true',
+                recent: [],
 
                 translations: {
                     en: {
@@ -591,7 +627,9 @@
                         notFound: 'Document not found',
                         invalidFormat: 'Invalid document number format',
                         error: 'An error occurred. Please try again.',
-                        footer: 'Data sourced from the Romanian National Citizenship Authority'
+                        footer: 'Data sourced from the Romanian National Citizenship Authority',
+                        recentSearches: 'Recent searches',
+                        clearAll: 'Clear all'
                     },
                     ro: {
                         title: 'RO-DOSAR - Verificare Cetățenie',
@@ -610,11 +648,15 @@
                         notFound: 'Dosarul nu a fost găsit',
                         invalidFormat: 'Format invalid pentru numărul dosarului',
                         error: 'A apărut o eroare. Vă rugăm încercați din nou.',
-                        footer: 'Date preluate de la Autoritatea Națională pentru Cetățenie'
+                        footer: 'Date preluate de la Autoritatea Națională pentru Cetățenie',
+                        recentSearches: 'Căutări recente',
+                        clearAll: 'Șterge tot'
                     }
                 },
 
                 init() {
+                    this.loadRecent();
+
                     this.$watch('darkMode', (value) => {
                         localStorage.setItem('darkMode', value);
                     });
@@ -636,6 +678,47 @@
                     this.lang = newLang;
                     localStorage.setItem('lang', newLang);
                     document.documentElement.lang = newLang;
+                },
+
+                loadRecent() {
+                    try {
+                        const parsed = JSON.parse(localStorage.getItem('recentDocs') || '[]');
+                        this.recent = Array.isArray(parsed)
+                            ? parsed.filter(e => e && typeof e.num === 'string')
+                            : [];
+                    } catch (err) {
+                        this.recent = [];
+                        localStorage.removeItem('recentDocs');
+                    }
+                },
+
+                saveRecent() {
+                    localStorage.setItem('recentDocs', JSON.stringify(this.recent));
+                },
+
+                addRecent(doc) {
+                    const entry = {
+                        num: doc.documentNumber,
+                        solved: !!doc.solutionNumber,
+                        viewedAt: new Date().toISOString()
+                    };
+                    this.recent = [entry, ...this.recent.filter(e => e.num !== entry.num)].slice(0, 10);
+                    this.saveRecent();
+                },
+
+                removeRecent(num) {
+                    this.recent = this.recent.filter(e => e.num !== num);
+                    this.saveRecent();
+                },
+
+                clearRecent() {
+                    this.recent = [];
+                    this.saveRecent();
+                },
+
+                searchRecent(num) {
+                    this.query = num;
+                    this.search();
                 },
 
                 formatDate(dateStr) {
@@ -688,6 +771,7 @@
                         }
 
                         this.document = await response.json();
+                        this.addRecent(this.document);
 
                         // Update URL
                         const url = new URL(window.location);
