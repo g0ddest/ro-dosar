@@ -17,14 +17,16 @@ import (
 
 // MockStatsRepository is a mock implementation of StatsRepository
 type MockStatsRepository struct {
-	yearly        []repository.CategoryYearStats
-	activity      []repository.CategoryYearActivity
-	yearlyErr     error
-	activityErr   error
-	yearlyCalls   int
-	activityCalls int
-	aheadCount    int
-	aheadErr      error
+	yearly          []repository.CategoryYearStats
+	activity        []repository.CategoryYearActivity
+	yearlyErr       error
+	activityErr     error
+	yearlyCalls     int
+	activityCalls   int
+	aheadCount      int
+	aheadErr        error
+	solvedInYear    int
+	solvedInYearErr error
 }
 
 func (r *MockStatsRepository) GetYearlyStats(ctx context.Context) ([]repository.CategoryYearStats, error) {
@@ -39,6 +41,10 @@ func (r *MockStatsRepository) GetRecentActivity(ctx context.Context, since time.
 
 func (r *MockStatsRepository) CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error) {
 	return r.aheadCount, r.aheadErr
+}
+
+func (r *MockStatsRepository) CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error) {
+	return r.solvedInYear, r.solvedInYearErr
 }
 
 func newStatsHandler(statsRepo repository.StatsRepository) *Handler {
@@ -290,5 +296,102 @@ func TestGetDocument_QueueErrorNonFatal(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), `"queue"`) {
 		t.Error("queue must be absent when its computation fails")
+	}
+}
+
+func TestGetDocument_QueueLastYearFallback(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{
+		aheadCount:   4210,
+		solvedInYear: 9800,
+		// yearly present so the category exists in the stats payload,
+		// but no recent activity -> 90-day pace is 0
+		yearly: []repository.CategoryYearStats{
+			{Category: "ART_10", Year: 2022, Total: 100, Solved: 10, WithTerm: 20},
+		},
+	}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Queue == nil || resp.Queue.SolvedLast90Days != 0 {
+		t.Fatalf("wrong queue: %+v", resp.Queue)
+	}
+	if resp.Queue.SolvedLastYear == nil || *resp.Queue.SolvedLastYear != 9800 {
+		t.Errorf("expected solvedLastYear 9800, got %+v", resp.Queue.SolvedLastYear)
+	}
+	// ceil(4210 / (9800/12)) = ceil(5.155...) = 6
+	if resp.Queue.EstimatedMonths == nil || *resp.Queue.EstimatedMonths != 6 {
+		t.Errorf("expected estimatedMonths 6, got %+v", resp.Queue.EstimatedMonths)
+	}
+}
+
+func TestGetDocument_QueueNoLastYearOnRecentPath(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{
+		aheadCount:   100,
+		solvedInYear: 9800, // must be ignored: recent pace is available
+		yearly: []repository.CategoryYearStats{
+			{Category: "ART_10", Year: 2022, Total: 100, Solved: 10, WithTerm: 20},
+		},
+		activity: []repository.CategoryYearActivity{
+			{Category: "ART_10", Year: 2022, Solved: 300},
+		},
+	}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	if strings.Contains(rec.Body.String(), "solvedLastYear") {
+		t.Error("solvedLastYear must be absent when the recent pace is used")
+	}
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	// ceil(100 / (300/3)) = 1
+	if resp.Queue == nil || resp.Queue.EstimatedMonths == nil || *resp.Queue.EstimatedMonths != 1 {
+		t.Errorf("recent-pace estimate broken: %+v", resp.Queue)
+	}
+}
+
+func TestGetDocument_QueueBothPacesZero(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{aheadCount: 77}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Queue == nil || resp.Queue.Ahead != 77 {
+		t.Fatalf("wrong queue: %+v", resp.Queue)
+	}
+	if resp.Queue.EstimatedMonths != nil || resp.Queue.SolvedLastYear != nil {
+		t.Errorf("expected unknown-pace shape, got %+v", resp.Queue)
+	}
+}
+
+func TestGetDocument_QueueFallbackErrorNonFatal(t *testing.T) {
+	docRepo := newQueueDocument(t, "201/A/2022", time.Date(2022, 3, 1, 0, 0, 0, 0, time.UTC), "ART_10", false)
+	statsRepo := &MockStatsRepository{aheadCount: 77, solvedInYearErr: context.DeadlineExceeded}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo)
+
+	rec := doDocumentRequest(t, handler, "201", "A", "2022")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fallback error must not fail the request, got %d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), `"queue"`) {
+		t.Error("queue must be absent when the fallback lookup fails")
 	}
 }

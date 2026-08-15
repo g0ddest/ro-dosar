@@ -103,3 +103,19 @@ func (r *StatsRepository) CountAheadInQueue(ctx context.Context, category string
 	err := r.db.Pool.QueryRow(ctx, query, category, year, number).Scan(&count)
 	return count, err
 }
+
+// CountSolvedInYear counts the category's documents whose solution_number
+// year segment equals the given year
+func (r *StatsRepository) CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error) {
+	query := `
+		SELECT COUNT(*)::int
+		FROM documents
+		WHERE category = $1
+		  AND solution_number IS NOT NULL
+		  AND split_part(solution_number, '/', 3) = $2::text
+	`
+
+	var count int
+	err := r.db.Pool.QueryRow(ctx, query, category, solutionYear).Scan(&count)
+	return count, err
+}

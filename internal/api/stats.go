@@ -67,6 +67,7 @@ type StatsResponse struct {
 type QueueResponse struct {
 	Ahead            int  `json:"ahead"`
 	SolvedLast90Days int  `json:"solvedLast90Days"`
+	SolvedLastYear   *int `json:"solvedLastYear,omitempty"`
 	EstimatedMonths  *int `json:"estimatedMonths,omitempty"`
 }
 
@@ -196,6 +197,17 @@ func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*Qu
 	queue := &QueueResponse{Ahead: ahead, SolvedLast90Days: solved90}
 	if solved90 > 0 {
 		months := int(math.Ceil(float64(ahead) / (float64(solved90) / 3.0)))
+		queue.EstimatedMonths = &months
+		return queue, nil
+	}
+
+	lastYear, err := h.statsRepo.CountSolvedInYear(ctx, doc.Category.String(), time.Now().Year()-1)
+	if err != nil {
+		return nil, err
+	}
+	if lastYear > 0 {
+		queue.SolvedLastYear = &lastYear
+		months := int(math.Ceil(float64(ahead) / (float64(lastYear) / 12.0)))
 		queue.EstimatedMonths = &months
 	}
 	return queue, nil
