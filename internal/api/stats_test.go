@@ -27,6 +27,9 @@ type MockStatsRepository struct {
 	aheadErr        error
 	solvedInYear    int
 	solvedInYearErr error
+	cohorts         []repository.CohortCell
+	cohortsErr      error
+	cohortCalls     int
 }
 
 func (r *MockStatsRepository) GetYearlyStats(ctx context.Context) ([]repository.CategoryYearStats, error) {
@@ -45,6 +48,11 @@ func (r *MockStatsRepository) CountAheadInQueue(ctx context.Context, category st
 
 func (r *MockStatsRepository) CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error) {
 	return r.solvedInYear, r.solvedInYearErr
+}
+
+func (r *MockStatsRepository) GetCohortMatrix(ctx context.Context) ([]repository.CohortCell, error) {
+	r.cohortCalls++
+	return r.cohorts, r.cohortsErr
 }
 
 func newStatsHandler(statsRepo repository.StatsRepository) *Handler {
@@ -393,5 +401,73 @@ func TestGetDocument_QueueFallbackErrorNonFatal(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), `"queue"`) {
 		t.Error("queue must be absent when the fallback lookup fails")
+	}
+}
+
+func doCohortsRequest(t *testing.T, handler *Handler) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/stats/cohorts", nil)
+	rec := httptest.NewRecorder()
+	handler.GetCohortStats(rec, req)
+	return rec
+}
+
+func TestGetCohortStats_ShapeAndOrder(t *testing.T) {
+	statsRepo := &MockStatsRepository{
+		cohorts: []repository.CohortCell{
+			{Category: "ART_10", RegYear: 2023, SolYear: 2026, Count: 141, P50: 1500, P90: 2900},
+			{Category: "ART_8", RegYear: 2023, SolYear: 2025, Count: 55, P50: 300, P90: 580},
+			{Category: "UNKNOWN", RegYear: 2020, SolYear: 2021, Count: 5, P50: 1, P90: 2},
+		},
+	}
+	handler := newStatsHandler(statsRepo)
+
+	rec := doCohortsRequest(t, handler)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp CohortStatsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.GeneratedAt == "" {
+		t.Error("expected generatedAt")
+	}
+	if len(resp.Categories) != 2 ||
+		resp.Categories[0].Category.Code != "ART_8" || resp.Categories[1].Category.Code != "ART_10" {
+		t.Fatalf("wrong categories/order: %+v", resp.Categories)
+	}
+	cell := resp.Categories[1].Cohorts[0]
+	if cell.RegYear != 2023 || cell.SolYear != 2026 || cell.Count != 141 || cell.P50 != 1500 || cell.P90 != 2900 {
+		t.Errorf("wrong cell: %+v", cell)
+	}
+	if strings.Contains(rec.Body.String(), "description") {
+		t.Error("cohorts payload must not contain category descriptions")
+	}
+}
+
+func TestGetCohortStats_Cache(t *testing.T) {
+	statsRepo := &MockStatsRepository{
+		cohorts: []repository.CohortCell{{Category: "ART_10", RegYear: 2023, SolYear: 2026, Count: 1, P50: 1, P90: 1}},
+	}
+	handler := newStatsHandler(statsRepo)
+
+	doCohortsRequest(t, handler)
+	doCohortsRequest(t, handler)
+
+	if statsRepo.cohortCalls != 1 {
+		t.Errorf("expected repository hit once, got %d", statsRepo.cohortCalls)
+	}
+}
+
+func TestGetCohortStats_RepositoryError(t *testing.T) {
+	statsRepo := &MockStatsRepository{cohortsErr: context.DeadlineExceeded}
+	handler := newStatsHandler(statsRepo)
+
+	rec := doCohortsRequest(t, handler)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rec.Code)
 	}
 }

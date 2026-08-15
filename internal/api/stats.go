@@ -212,3 +212,84 @@ func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*Qu
 	}
 	return queue, nil
 }
+
+// CohortCellResponse is one (registration year, solution year) cell
+type CohortCellResponse struct {
+	RegYear int `json:"regYear"`
+	SolYear int `json:"solYear"`
+	Count   int `json:"count"`
+	P50     int `json:"p50"`
+	P90     int `json:"p90"`
+}
+
+// CategoryCohortsResponse groups cohort cells for one category
+type CategoryCohortsResponse struct {
+	Category StatsCategoryRef     `json:"category"`
+	Cohorts  []CohortCellResponse `json:"cohorts"`
+}
+
+// CohortStatsResponse is the GET /api/v1/stats/cohorts payload
+type CohortStatsResponse struct {
+	GeneratedAt string                    `json:"generatedAt"`
+	Categories  []CategoryCohortsResponse `json:"categories"`
+}
+
+// buildCohortResponse assembles the matrix payload in fixed category order
+func buildCohortResponse(cells []repository.CohortCell, now time.Time) *CohortStatsResponse {
+	byCategory := make(map[string][]CohortCellResponse)
+	for _, c := range cells {
+		byCategory[c.Category] = append(byCategory[c.Category], CohortCellResponse{
+			RegYear: c.RegYear, SolYear: c.SolYear, Count: c.Count, P50: c.P50, P90: c.P90,
+		})
+	}
+
+	resp := &CohortStatsResponse{
+		GeneratedAt: now.UTC().Format(time.RFC3339),
+		Categories:  []CategoryCohortsResponse{},
+	}
+	for _, cat := range statsCategoryOrder {
+		cohorts, ok := byCategory[cat.String()]
+		if !ok {
+			continue
+		}
+		sort.Slice(cohorts, func(i, j int) bool {
+			if cohorts[i].RegYear != cohorts[j].RegYear {
+				return cohorts[i].RegYear < cohorts[j].RegYear
+			}
+			return cohorts[i].SolYear < cohorts[j].SolYear
+		})
+		info := cat.Info()
+		resp.Categories = append(resp.Categories, CategoryCohortsResponse{
+			Category: StatsCategoryRef{Code: info.Code, Name: info.Name, NameRO: info.NameRO},
+			Cohorts:  cohorts,
+		})
+	}
+	return resp
+}
+
+// GetCohortStats handles GET /api/v1/stats/cohorts
+func (h *Handler) GetCohortStats(w http.ResponseWriter, r *http.Request) {
+	h.cohortMu.Lock()
+	if h.cohortCache != nil && time.Since(h.cohortCacheAt) < statsCacheTTL {
+		cached := h.cohortCache
+		h.cohortMu.Unlock()
+		h.writeJSON(w, http.StatusOK, cached)
+		return
+	}
+	h.cohortMu.Unlock()
+
+	cells, err := h.statsRepo.GetCohortMatrix(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+
+	resp := buildCohortResponse(cells, time.Now())
+
+	h.cohortMu.Lock()
+	h.cohortCache = resp
+	h.cohortCacheAt = time.Now()
+	h.cohortMu.Unlock()
+
+	h.writeJSON(w, http.StatusOK, resp)
+}

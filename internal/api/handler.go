@@ -22,6 +22,10 @@ type Handler struct {
 	statsMu      sync.Mutex
 	statsCache   *StatsResponse
 	statsCacheAt time.Time
+
+	cohortMu      sync.Mutex
+	cohortCache   *CohortStatsResponse
+	cohortCacheAt time.Time
 }
 
 // NewHandler creates a new API handler

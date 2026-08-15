@@ -120,3 +120,40 @@ func (r *StatsRepository) CountSolvedInYear(ctx context.Context, category string
 	err := r.db.Pool.QueryRow(ctx, query, category, strconv.Itoa(solutionYear)).Scan(&count)
 	return count, err
 }
+
+// GetCohortMatrix returns solved-dossier counts and number percentiles
+// grouped by category, registration year and solution year
+func (r *StatsRepository) GetCohortMatrix(ctx context.Context) ([]repository.CohortCell, error) {
+	query := `
+		SELECT category,
+		       EXTRACT(YEAR FROM registered_at)::int AS reg_year,
+		       split_part(solution_number, '/', 3)::int AS sol_year,
+		       COUNT(*)::int AS cnt,
+		       (percentile_cont(0.5) WITHIN GROUP
+		         (ORDER BY split_part(document_number, '/', 1)::int))::int AS p50,
+		       (percentile_cont(0.9) WITHIN GROUP
+		         (ORDER BY split_part(document_number, '/', 1)::int))::int AS p90
+		FROM documents
+		WHERE solution_number IS NOT NULL
+		  AND split_part(solution_number, '/', 3) ~ '^[0-9]{4}$'
+		GROUP BY 1, 2, 3
+		ORDER BY 1, 2, 3
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cells []repository.CohortCell
+	for rows.Next() {
+		var c repository.CohortCell
+		if err := rows.Scan(&c.Category, &c.RegYear, &c.SolYear, &c.Count, &c.P50, &c.P90); err != nil {
+			return nil, err
+		}
+		cells = append(cells, c)
+	}
+
+	return cells, rows.Err()
+}
