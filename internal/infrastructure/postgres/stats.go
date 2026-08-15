@@ -101,6 +101,7 @@ func (r *StatsRepository) GetCohortMatrix(ctx context.Context) ([]repository.Coh
 		FROM documents
 		WHERE solution_number IS NOT NULL
 		  AND split_part(solution_number, '/', 3) ~ '^[0-9]{4}$'
+		  AND split_part(document_number, '/', 1) ~ '^[0-9]+$'
 		GROUP BY 1, 2, 3
 		ORDER BY 1, 2, 3
 	`

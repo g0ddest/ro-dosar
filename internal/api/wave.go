@@ -129,7 +129,17 @@ func buildWaveEstimate(cat CategoryStatsResponse, docYear, docNumber int, now ti
 		return nil
 	}
 
-	q := float64(docNumber) / float64(cohort.Total)
+	totalEff := float64(cohort.Total)
+	nowFrac := nowFraction(now)
+	if docYear == now.Year() {
+		elapsed := nowFrac - float64(now.Year())
+		if elapsed < 0.25 {
+			elapsed = 0.25
+		}
+		totalEff = float64(cohort.Total) / elapsed
+	}
+
+	q := float64(docNumber) / totalEff
 	if q > 1 {
 		q = 1
 	}
@@ -138,7 +148,10 @@ func buildWaveEstimate(cat CategoryStatsResponse, docYear, docNumber int, now ti
 		Percentile:  math.Round(q*100) / 100,
 	}
 
-	nowFrac := nowFraction(now)
+	if cohort.Total < waveMinCohortSize {
+		return resp
+	}
+
 	censored := censoredYears(cat.Years)
 	if censored[docYear] {
 		resp.WavePassed = true

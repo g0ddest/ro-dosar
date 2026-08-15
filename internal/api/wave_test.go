@@ -156,3 +156,40 @@ func TestWave_CensoredCohortWavePassed(t *testing.T) {
 		t.Error("wavePassed must carry no months")
 	}
 }
+
+func TestWave_CurrentYearProjectedDenominator(t *testing.T) {
+	// fixtureNow is mid-August 2026: elapsed ~0.62, so cohort 2026's partial
+	// total (5115) is projected to ~8250 and q for No. 500 drops from ~0.098
+	// to ~0.06; displayed cohortTotal stays the actual 5115
+	q := buildWaveEstimate(art11Fixture(), 2026, 500, fixtureNow)
+	if q == nil || q.CohortTotal != 5115 {
+		t.Fatalf("wrong cohortTotal: %+v", q)
+	}
+	if q.Percentile > 0.07 {
+		t.Errorf("expected projected percentile ~0.06, got %v", q.Percentile)
+	}
+}
+
+func TestWave_SmallCohortPercentileOnly(t *testing.T) {
+	cat := art11Fixture()
+	cat.Years = append(cat.Years, YearStatsResponse{Year: 2009, Total: 40, Solved: 5})
+	q := buildWaveEstimate(cat, 2009, 20, fixtureNow)
+	if q == nil || q.CohortTotal != 40 {
+		t.Fatalf("expected percentile-only for small cohort: %+v", q)
+	}
+	if q.WavePassed || q.EstimatedMonthsMin != nil || q.EstimatedMonthsMax != nil {
+		t.Errorf("small cohort must carry no estimate: %+v", q)
+	}
+}
+
+func TestWave_ZeroPaceFloor(t *testing.T) {
+	// cohort 2025 has no recent activity (r90 == 0) and a tiny tCurve target:
+	// the rate floor saturates at 12 months -> [9, 16]
+	q := buildWaveEstimate(art11Fixture(), 2025, 100, fixtureNow)
+	if q == nil || q.WavePassed || q.EstimatedMonthsMin == nil {
+		t.Fatalf("expected estimate: %+v", q)
+	}
+	if *q.EstimatedMonthsMin != 9 || *q.EstimatedMonthsMax != 16 {
+		t.Errorf("expected zero-pace floor [9, 16], got [%d, %d]", *q.EstimatedMonthsMin, *q.EstimatedMonthsMax)
+	}
+}

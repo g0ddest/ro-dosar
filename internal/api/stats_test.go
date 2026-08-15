@@ -303,9 +303,6 @@ func TestGetDocument_WaveQueueForUnsolved(t *testing.T) {
 		t.Errorf("expected [21, 36], got %+v", resp.Queue)
 	}
 	for _, gone := range []string{`"ahead"`, `"solvedLast90Days"`, `"solvedLastYear"`, `"estimatedMonths"`} {
-		if gone == `"estimatedMonths"` {
-			continue // substring of estimatedMonthsMin/Max
-		}
 		if strings.Contains(rec.Body.String(), gone) {
 			t.Errorf("legacy field %s must be gone", gone)
 		}
