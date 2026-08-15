@@ -329,7 +329,9 @@
                                 </svg>
                             </div>
                             <div class="min-w-0">
-                                <p class="text-sm text-blue-700 dark:text-blue-300" x-text="t('queuePosition').replace('{n}', fmtNum(docNumber())).replace('{total}', fmtNum(document.queue.cohortTotal))"></p>
+                                <template x-if="document?.queue">
+                                    <p class="text-sm text-blue-700 dark:text-blue-300" x-text="t('queuePosition').replace('{n}', fmtNum(docNumber())).replace('{total}', fmtNum(document.queue.cohortTotal))"></p>
+                                </template>
                                 <template x-if="document?.queue?.wavePassed">
                                     <p class="text-base font-semibold text-blue-800 dark:text-blue-200 mt-1" x-text="t('queueWavePassed')"></p>
                                 </template>
