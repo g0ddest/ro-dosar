@@ -197,15 +197,20 @@ func TestExtractOrdinLinks(t *testing.T) {
 	<a href="https://cetatenie.just.ro/wp-content/uploads/undated.pdf">2999P</a>
 	<a href="https://cetatenie.just.ro/wp-content/uploads/Ordin-x-01.01.2026.pdf">Descarca aici</a>
 	<a href="https://cetatenie.just.ro/despre-noi/">2638P</a>
+	<a href="https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2700P-5.8.2026-art-11.pdf">2700&#160;P</a>
 	</body></html>`
 
-	links, err := ExtractOrdinLinks(html, "https://cetatenie.just.ro/ordine-articolul-1-1/")
+	links, pdfAnchors, err := ExtractOrdinLinks(html, "https://cetatenie.just.ro/ordine-articolul-1-1/")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(links) != 5 {
-		t.Fatalf("expected 5 links (dateless, non-numeric-text and non-pdf skipped), got %d: %+v", len(links), links)
+	if pdfAnchors != 8 {
+		t.Fatalf("expected 8 .pdf anchors in fixture, got %d", pdfAnchors)
+	}
+
+	if len(links) != 6 {
+		t.Fatalf("expected 6 links (dateless, non-numeric-text and non-pdf skipped), got %d: %+v", len(links), links)
 	}
 
 	first := links[0]
@@ -222,5 +227,13 @@ func TestExtractOrdinLinks(t *testing.T) {
 	// letter defaults to P when the anchor text has no letter
 	if links[4].Number != 2537 || links[4].Letter != "P" {
 		t.Errorf("expected default letter P: %+v", links[4])
+	}
+
+	// NBSP inside the anchor text and single-digit day/month must both be tolerated
+	last := links[5]
+	if last.Number != 2700 || last.Letter != "P" ||
+		!last.Date.Equal(time.Date(2026, 8, 5, 0, 0, 0, 0, time.UTC)) ||
+		last.URL != "https://cetatenie.just.ro/wp-content/uploads/2023/11/Ordin-2700P-5.8.2026-art-11.pdf" {
+		t.Errorf("wrong NBSP/single-digit-date link: %+v", last)
 	}
 }

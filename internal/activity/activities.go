@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	"go.temporal.io/sdk/activity"
+
 	"ro-dosar/internal/domain"
 	infrahttp "ro-dosar/internal/infrastructure/http"
 	"ro-dosar/internal/infrastructure/pdf"
@@ -514,9 +516,12 @@ type ExtractOrdineOutput struct {
 
 // ExtractOrdine parses an Ordine listing page into indexable ordin records
 func (a *Activities) ExtractOrdine(ctx context.Context, input ExtractOrdineInput) (*ExtractOrdineOutput, error) {
-	links, err := parser.ExtractOrdinLinks(string(input.Content), input.PageURL)
+	links, pdfAnchors, err := parser.ExtractOrdinLinks(string(input.Content), input.PageURL)
 	if err != nil {
 		return nil, err
+	}
+	if skipped := pdfAnchors - len(links); skipped > 0 {
+		activity.GetLogger(ctx).Info("Ordine anchors skipped", "page", input.PageURL, "skipped", skipped, "extracted", len(links))
 	}
 
 	out := &ExtractOrdineOutput{}

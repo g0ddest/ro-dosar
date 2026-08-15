@@ -229,32 +229,38 @@ type OrdinLink struct {
 
 var (
 	ordinTextPattern = regexp.MustCompile(`^\s*(\d+)\s*[-.]?\s*([A-Za-z]{1,3})?\s*$`)
-	ordinDatePattern = regexp.MustCompile(`(\d{2})\.(\d{2})\.(\d{4})`)
+	ordinDatePattern = regexp.MustCompile(`(\d{1,2})\.(\d{1,2})\.(\d{4})`)
 )
 
 // ExtractOrdinLinks parses an Ordine listing page: the anchor text carries
 // the ordin number ("2637P"), the PDF filename carries the date
 // ("Ordin-2637P-12.08.2026-art-11.pdf"). Anchors without a parseable number
-// or date are skipped — the index is best-effort.
-func ExtractOrdinLinks(htmlContent, baseURL string) ([]OrdinLink, error) {
+// or date are skipped — the index is best-effort. pdfAnchors counts every
+// anchor whose href ends in ".pdf", regardless of whether it was extracted,
+// so callers can measure how many candidates were skipped.
+func ExtractOrdinLinks(htmlContent, baseURL string) (links []OrdinLink, pdfAnchors int, err error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	base, err := url.Parse(baseURL)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	var links []OrdinLink
 	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
 		if !strings.HasSuffix(strings.ToLower(strings.TrimSpace(href)), ".pdf") {
 			return
 		}
+		pdfAnchors++
 
-		m := ordinTextPattern.FindStringSubmatch(s.Text())
+		// WordPress anchor text often contains non-breaking spaces (U+00A0)
+		// instead of regular spaces; Go's \s does not match them.
+		text := strings.ReplaceAll(s.Text(), " ", " ")
+
+		m := ordinTextPattern.FindStringSubmatch(text)
 		if m == nil {
 			return
 		}
@@ -291,5 +297,5 @@ func ExtractOrdinLinks(htmlContent, baseURL string) ([]OrdinLink, error) {
 		})
 	})
 
-	return links, nil
+	return links, pdfAnchors, nil
 }
