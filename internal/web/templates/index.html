@@ -692,9 +692,14 @@
                         tlInExam: 'Dossier under examination',
                         tlInExamDesc: 'The National Citizenship Authority is verifying that the legal requirements are met',
                         tlAfterTitle: 'Oath and citizenship certificate',
-                        tlAfterInfo: 'These stages are not published online and will not appear in this tracker. After the order is published, the oath is scheduled (legal window: 6 months); the certificate is handed at the ceremony.',
-                        tlAfterInfoSolved: 'The order is published — the oath is now your step: book it and take it within the legal 6-month window; the certificate is handed at the ceremony. This tracker does not follow these stages.',
-                        tlAfterLink: 'Details and booking'
+                        tlAfterInfo: 'After the order is published, the Bucharest ceremony date will appear here once ANC publishes the schedule; consulate ceremonies are not published. The certificate is handed at the ceremony.',
+                        tlAfterInfoSolved: 'The order is published — book and take the oath within the legal 6-month window. The Bucharest ceremony date will appear here once ANC publishes the schedule; consulate ceremonies are not published. The certificate is handed at the ceremony.',
+                        tlAfterLink: 'Details and booking',
+                        tlOathScheduled: 'Oath scheduled: {date}',
+                        tlOathDone: 'Oath: {date}',
+                        tlOathPlace: 'ANC headquarters, Bucharest',
+                        tlOathList: 'List (PDF)',
+                        tlAfterCert: 'The citizenship certificate is handed at the oath ceremony.'
                     },
                     ro: {
                         title: 'RO-DOSAR - Verificare Cetățenie',
@@ -745,9 +750,14 @@
                         tlInExam: 'Dosarul este în examinare',
                         tlInExamDesc: 'Autoritatea Națională pentru Cetățenie verifică îndeplinirea condițiilor prevăzute de lege',
                         tlAfterTitle: 'Jurământul și certificatul de cetățenie',
-                        tlAfterInfo: 'Aceste etape nu se publică online și nu vor apărea în acest tracker. După publicarea ordinului, jurământul se programează (termen legal: 6 luni); certificatul se înmânează la ceremonie.',
-                        tlAfterInfoSolved: 'Ordinul este publicat — jurământul este acum pasul dvs.: programați-l și depuneți-l în termenul legal de 6 luni; certificatul se înmânează la ceremonie. Acest tracker nu urmărește aceste etape.',
-                        tlAfterLink: 'Detalii și programare'
+                        tlAfterInfo: 'După publicarea ordinului, data ceremoniei de la București va apărea aici odată ce ANC publică lista; ceremoniile de la consulate nu se publică. Certificatul se înmânează la ceremonie.',
+                        tlAfterInfoSolved: 'Ordinul este publicat — programați și depuneți jurământul în termenul legal de 6 luni. Data ceremoniei de la București va apărea aici odată ce ANC publică lista; ceremoniile de la consulate nu se publică. Certificatul se înmânează la ceremonie.',
+                        tlAfterLink: 'Detalii și programare',
+                        tlOathScheduled: 'Jurământ programat: {date}',
+                        tlOathDone: 'Jurământ: {date}',
+                        tlOathPlace: 'sediul ANC București',
+                        tlOathList: 'Lista (PDF)',
+                        tlAfterCert: 'Certificatul de cetățenie se înmânează la ceremonia de jurământ.'
                     }
                 },
 
@@ -950,7 +960,21 @@
                         nodes.push({ state: 'projected', title: this.t('tlOrdinFuture'), subtitle, extra, disclaimer });
                         nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfo'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
                     } else {
-                        nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfoSolved'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
+                        const oath = this.document.oath;
+                        if (oath) {
+                            const today = new Date().toISOString().slice(0, 10);
+                            const upcoming = oath.date >= today;
+                            nodes.push({
+                                state: upcoming ? 'current' : 'done',
+                                title: this.t(upcoming ? 'tlOathScheduled' : 'tlOathDone').replace('{date}', this.formatDate(oath.date)) + (oath.time ? ', ' + oath.time : ''),
+                                subtitle: this.t('tlOathPlace'),
+                                url: oath.listUrl,
+                                urlText: this.t('tlOathList')
+                            });
+                            nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterCert') });
+                        } else {
+                            nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfoSolved'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
+                        }
                     }
                     return nodes;
                 },
