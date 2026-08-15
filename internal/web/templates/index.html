@@ -336,8 +336,11 @@
                                     <div>
                                         <p class="text-lg font-semibold text-blue-800 dark:text-blue-200" x-text="'≈ ' + fmtNum(document.queue.ahead) + ' ' + t('queueAhead')"></p>
                                         <p class="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                                            <template x-if="document?.queue?.estimatedMonths">
+                                            <template x-if="document?.queue?.estimatedMonths && !document?.queue?.solvedLastYear">
                                                 <span x-text="'~' + fmtNum(document.queue.solvedLast90Days) + ' ' + t('queuePace').replace('{n}', stats?.activityWindowDays || 90) + ' · ' + t('queueEstimate') + ': ~' + document.queue.estimatedMonths + ' ' + t('queueMonths')"></span>
+                                            </template>
+                                            <template x-if="document?.queue?.estimatedMonths && document?.queue?.solvedLastYear">
+                                                <span x-text="'~' + fmtNum(document.queue.solvedLastYear) + ' ' + t('queuePaceLastYear') + ' · ' + t('queueEstimate') + ': ~' + document.queue.estimatedMonths + ' ' + t('queueMonths')"></span>
                                             </template>
                                             <template x-if="!document?.queue?.estimatedMonths">
                                                 <span x-text="t('queuePaceUnknown')"></span>
@@ -754,7 +757,8 @@
                         queueMonths: 'months',
                         queueNextUp: 'You are next in line',
                         queuePaceUnknown: 'Processing pace not yet known',
-                        queueDisclaimer: 'Linear estimate based on the current pace — not an official term'
+                        queueDisclaimer: 'Linear estimate based on the current pace — not an official term',
+                        queuePaceLastYear: 'solutions last year'
                     },
                     ro: {
                         title: 'RO-DOSAR - Verificare Cetățenie',
@@ -792,7 +796,8 @@
                         queueMonths: 'luni',
                         queueNextUp: 'Sunteți următorul la rând',
                         queuePaceUnknown: 'Ritmul de procesare nu este încă cunoscut',
-                        queueDisclaimer: 'Estimare liniară pe baza ritmului actual — nu este un termen oficial'
+                        queueDisclaimer: 'Estimare liniară pe baza ritmului actual — nu este un termen oficial',
+                        queuePaceLastYear: 'soluții anul trecut'
                     }
                 },
 
