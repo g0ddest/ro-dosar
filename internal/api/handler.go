@@ -18,6 +18,8 @@ type Handler struct {
 	documentRepo    repository.DocumentRepository
 	appointmentRepo repository.AppointmentRepository
 	statsRepo       repository.StatsRepository
+	auditRepo       repository.DocumentAuditRepository
+	ordinRepo       repository.OrdinRepository
 
 	statsMu      sync.Mutex
 	statsCache   *StatsResponse
@@ -29,11 +31,13 @@ type Handler struct {
 }
 
 // NewHandler creates a new API handler
-func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repository.AppointmentRepository, statsRepo repository.StatsRepository) *Handler {
+func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repository.AppointmentRepository, statsRepo repository.StatsRepository, auditRepo repository.DocumentAuditRepository, ordinRepo repository.OrdinRepository) *Handler {
 	return &Handler{
 		documentRepo:    documentRepo,
 		appointmentRepo: appointmentRepo,
 		statsRepo:       statsRepo,
+		auditRepo:       auditRepo,
+		ordinRepo:       ordinRepo,
 	}
 }
 
@@ -47,13 +51,14 @@ type CategoryResponse struct {
 
 // DocumentResponse represents a document in API responses
 type DocumentResponse struct {
-	DocumentNumber string                `json:"documentNumber"`
-	RegisteredAt   string                `json:"registeredAt"`
-	Category       CategoryResponse      `json:"category"`
-	Term           *string               `json:"term,omitempty"`
-	SolutionNumber *string               `json:"solutionNumber,omitempty"`
-	Appointments   []AppointmentResponse `json:"appointments,omitempty"`
-	Queue          *QueueResponse        `json:"queue,omitempty"`
+	DocumentNumber string                  `json:"documentNumber"`
+	RegisteredAt   string                  `json:"registeredAt"`
+	Category       CategoryResponse        `json:"category"`
+	Term           *string                 `json:"term,omitempty"`
+	SolutionNumber *string                 `json:"solutionNumber,omitempty"`
+	Appointments   []AppointmentResponse   `json:"appointments,omitempty"`
+	Queue          *QueueResponse          `json:"queue,omitempty"`
+	Timeline       []TimelineEventResponse `json:"timeline"`
 }
 
 // AppointmentResponse represents an appointment in API responses
@@ -153,6 +158,7 @@ func (h *Handler) GetDocument(w http.ResponseWriter, r *http.Request) {
 			response.Queue = queue
 		}
 	}
+	response.Timeline = h.buildDocumentTimeline(r.Context(), doc)
 	h.writeJSON(w, http.StatusOK, response)
 }
 
