@@ -70,7 +70,8 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 	if input.OathPageURL != "" {
 		var oathPage activity.FetchPageOutput
 		if err := workflow.ExecuteActivity(ctx, activities.FetchPage, activity.FetchPageInput{
-			URL: input.OathPageURL,
+			URL:         input.OathPageURL,
+			WaitDOMOnly: true,
 		}).Get(ctx, &oathPage); err != nil {
 			logger.Error("Oath page fetch failed", "url", input.OathPageURL, "error", err)
 			output.Failed = append(output.Failed, input.OathPageURL)

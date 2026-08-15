@@ -61,6 +61,10 @@ func NewActivities(
 // FetchPageInput contains input for FetchPage activity
 type FetchPageInput struct {
 	URL string
+	// WaitDOMOnly waits only for PDF links to be present in the DOM instead
+	// of visible — some listing pages keep their links inside collapsed
+	// sections that never become visible
+	WaitDOMOnly bool
 }
 
 // FetchPageOutput contains output from FetchPage activity
@@ -70,7 +74,11 @@ type FetchPageOutput struct {
 
 // FetchPage fetches an HTML page using headless browser
 func (a *Activities) FetchPage(ctx context.Context, input FetchPageInput) (*FetchPageOutput, error) {
-	content, _, err := a.browserClient.FetchPage(ctx, input.URL)
+	fetch := a.browserClient.FetchPage
+	if input.WaitDOMOnly {
+		fetch = a.browserClient.FetchPageDOM
+	}
+	content, _, err := fetch(ctx, input.URL)
 	if err != nil {
 		return nil, err
 	}
