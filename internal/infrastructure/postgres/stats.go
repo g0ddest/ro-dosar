@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"ro-dosar/internal/repository"
@@ -112,10 +113,10 @@ func (r *StatsRepository) CountSolvedInYear(ctx context.Context, category string
 		FROM documents
 		WHERE category = $1
 		  AND solution_number IS NOT NULL
-		  AND split_part(solution_number, '/', 3) = $2::text
+		  AND split_part(solution_number, '/', 3) = $2
 	`
 
 	var count int
-	err := r.db.Pool.QueryRow(ctx, query, category, solutionYear).Scan(&count)
+	err := r.db.Pool.QueryRow(ctx, query, category, strconv.Itoa(solutionYear)).Scan(&count)
 	return count, err
 }
