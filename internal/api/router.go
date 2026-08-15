@@ -20,6 +20,7 @@ func NewRouter(handler *Handler) *chi.Mux {
 	r.Route("/documents", func(r chi.Router) {
 		r.Get("/{number}/{category}/{year}", handler.GetDocument)
 	})
+	r.Get("/stats", handler.GetStats)
 
 	return r
 }

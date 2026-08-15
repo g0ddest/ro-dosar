@@ -109,7 +109,7 @@ func main() {
 
 	// Create main server mux
 	mainMux := http.NewServeMux()
-	mainMux.Handle("/api/v1/documents/", http.StripPrefix("/api/v1", apiRouter))
+	mainMux.Handle("/api/v1/", http.StripPrefix("/api/v1", apiRouter))
 	mainMux.Handle("/", webHandler.Router())
 
 	// Start main HTTP server
