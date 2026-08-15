@@ -170,7 +170,7 @@ func (h *Handler) GetDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	response.Timeline = h.buildDocumentTimeline(r.Context(), doc)
 	if doc.SolutionNumber != nil {
-		if oath, err := h.oathRepo.GetByDossier(r.Context(), doc.DocumentNumber.Number, doc.DocumentNumber.Year); err == nil {
+		if oath, err := h.oathRepo.GetByDossier(r.Context(), doc.DocumentNumber.Number, doc.DocumentNumber.Year); err == nil && oath != nil {
 			response.Oath = &OathResponse{
 				Date:    oath.Date.Format("2006-01-02"),
 				Time:    oath.Time,

@@ -88,6 +88,10 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			return output, nil
 		}
 
+		if len(oathLinks.URLs) == 0 {
+			logger.Warn("No oath list links found on the oath page — anchor wording may have changed", "url", input.OathPageURL)
+		}
+
 		for _, listURL := range oathLinks.URLs {
 			var known activity.CheckFileHashOutput
 			if err := workflow.ExecuteActivity(ctx, activities.CheckFileHash, activity.CheckFileHashInput{
@@ -117,6 +121,22 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			}).Get(ctx, &parsed); err != nil {
 				logger.Error("Oath list parse failed", "url", listURL, "error", err)
 				output.Failed = append(output.Failed, listURL)
+				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
+					Hash: download.Hash,
+				}).Get(ctx, nil); err != nil {
+					logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
+				}
+				continue
+			}
+
+			if len(parsed.Entries) == 0 {
+				logger.Error("Oath list parsed to zero entries — leaving unparsed for retry", "url", listURL)
+				output.Failed = append(output.Failed, listURL)
+				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
+					Hash: download.Hash,
+				}).Get(ctx, nil); err != nil {
+					logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
+				}
 				continue
 			}
 
@@ -128,6 +148,11 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			}).Get(ctx, nil); err != nil {
 				logger.Error("Oath schedule save failed", "url", listURL, "error", err)
 				output.Failed = append(output.Failed, listURL)
+				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
+					Hash: download.Hash,
+				}).Get(ctx, nil); err != nil {
+					logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
+				}
 				continue
 			}
 
