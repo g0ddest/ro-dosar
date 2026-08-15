@@ -54,7 +54,7 @@ func main() {
 				TaskQueue: workflow.TaskQueue,
 			},
 			workflow.OrdineIndexWorkflow,
-			workflow.OrdineIndexWorkflowInput{URLs: ordineURLs},
+			workflow.OrdineIndexWorkflowInput{URLs: ordineURLs, OathPageURL: baseURL + "/juramant/"},
 		)
 		if err != nil {
 			log.Fatalf("Failed to start ordine workflow: %v", err)
@@ -64,7 +64,7 @@ func main() {
 		if err := we.Get(context.Background(), &result); err != nil {
 			log.Fatalf("Ordine workflow failed: %v", err)
 		}
-		log.Printf("Ordine indexing done: %d indexed, %d pages failed", result.Indexed, len(result.Failed))
+		log.Printf("Ordine indexing done: %d indexed, %d oath entries, %d pages failed", result.Indexed, result.OathEntries, len(result.Failed))
 		return
 	}
 

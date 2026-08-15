@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"go.temporal.io/sdk/activity"
 
@@ -31,6 +32,7 @@ type Activities struct {
 	auditRepo       repository.DocumentAuditRepository
 	pdfContentRepo  repository.PDFContentRepository
 	ordinRepo       repository.OrdinRepository
+	oathRepo        repository.OathRepository
 }
 
 // NewActivities creates a new Activities instance
@@ -52,6 +54,7 @@ func NewActivities(
 		auditRepo:       postgres.NewDocumentAuditRepository(db),
 		pdfContentRepo:  postgres.NewPDFContentRepository(db),
 		ordinRepo:       postgres.NewOrdinRepository(db),
+		oathRepo:        postgres.NewOathRepository(db),
 	}
 }
 
@@ -545,4 +548,80 @@ type SaveOrdineInput struct {
 // SaveOrdine upserts the extracted ordins
 func (a *Activities) SaveOrdine(ctx context.Context, input SaveOrdineInput) error {
 	return a.ordinRepo.SaveBatch(ctx, input.Ordins)
+}
+
+// ExtractOathLinksInput contains input for ExtractOathLinks activity
+type ExtractOathLinksInput struct {
+	Content []byte
+	PageURL string
+}
+
+// ExtractOathLinksOutput contains output from ExtractOathLinks activity
+type ExtractOathLinksOutput struct {
+	URLs []string
+}
+
+// ExtractOathLinks extracts oath-schedule PDF links from the /juramant/ page
+func (a *Activities) ExtractOathLinks(ctx context.Context, input ExtractOathLinksInput) (*ExtractOathLinksOutput, error) {
+	links, err := parser.ExtractOathListLinks(string(input.Content), input.PageURL)
+	if err != nil {
+		return nil, err
+	}
+	return &ExtractOathLinksOutput{URLs: links}, nil
+}
+
+// ParseOathListPDFInput contains input for ParseOathListPDF activity
+type ParseOathListPDFInput struct {
+	Hash string // content stored in pdf_content by DownloadPDF
+}
+
+// ParseOathListPDFOutput contains output from ParseOathListPDF activity
+// (the lists are ~90 rows, well under payload limits)
+type ParseOathListPDFOutput struct {
+	Date    time.Time
+	Time    *string
+	Entries []parser.OathEntry
+}
+
+// ParseOathListPDF parses a downloaded oath-schedule PDF
+func (a *Activities) ParseOathListPDF(ctx context.Context, input ParseOathListPDFInput) (*ParseOathListPDFOutput, error) {
+	content, err := a.pdfContentRepo.Get(ctx, input.Hash)
+	if err != nil {
+		return nil, err
+	}
+
+	text, err := a.pdfExtractor.ExtractText(content)
+	if err != nil {
+		return nil, err
+	}
+
+	list, err := parser.ParseOathList(text)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ParseOathListPDFOutput{Date: list.Date, Time: list.Time, Entries: list.Entries}, nil
+}
+
+// SaveOathScheduleInput contains input for SaveOathSchedule activity
+type SaveOathScheduleInput struct {
+	Date    time.Time
+	Time    *string
+	Entries []parser.OathEntry
+	ListURL string
+}
+
+// SaveOathSchedule upserts the parsed oath entries
+func (a *Activities) SaveOathSchedule(ctx context.Context, input SaveOathScheduleInput) error {
+	records := make([]repository.OathEntryRecord, 0, len(input.Entries))
+	for _, e := range input.Entries {
+		records = append(records, repository.OathEntryRecord{
+			Number:  e.Number,
+			Year:    e.Year,
+			Date:    input.Date,
+			Time:    input.Time,
+			ListURL: input.ListURL,
+		})
+	}
+	return a.oathRepo.SaveBatch(ctx, records)
 }

@@ -203,3 +203,55 @@ Rezultate interviu 18.07.2023
 func timePtr(t time.Time) *time.Time {
 	return &t
 }
+
+func TestParseOathList(t *testing.T) {
+	text := `              TABEL CU DOSARELE PERSOANELOR CARE URMEAZĂ
+SA DEPUNĂ JURĂMÂNTUL DE CREDINTA FATĂ DE ROMÂNIA LA DATA DE 12.08.2026
+                          ORA 09.00
+
+                                      NR DOSAR
+          NR CRT
+              1.                      35573/2022
+              2.                      28886/2022
+              3.                      32914/2021
+              4.                      32914/2021
+              5.                       7921/2024
+`
+
+	list, err := ParseOathList(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !list.Date.Equal(time.Date(2026, 8, 12, 0, 0, 0, 0, time.UTC)) {
+		t.Errorf("wrong date: %v", list.Date)
+	}
+	if list.Time == nil || *list.Time != "09:00" {
+		t.Errorf("wrong time: %v", list.Time)
+	}
+	// duplicates (family members) deduplicated
+	if len(list.Entries) != 4 {
+		t.Fatalf("expected 4 unique entries, got %d: %+v", len(list.Entries), list.Entries)
+	}
+	if list.Entries[0].Number != 35573 || list.Entries[0].Year != 2022 {
+		t.Errorf("wrong first entry: %+v", list.Entries[0])
+	}
+	if list.Entries[3].Number != 7921 || list.Entries[3].Year != 2024 {
+		t.Errorf("wrong last entry: %+v", list.Entries[3])
+	}
+}
+
+func TestParseOathList_HourVariantsAndMissing(t *testing.T) {
+	list, err := ParseOathList("JURĂMÂNTUL ... LA DATA DE 5.09.2026\nORA 14:30\n1. 100/2020\n")
+	if err != nil || list.Time == nil || *list.Time != "14:30" {
+		t.Fatalf("hour variant failed: %+v %v", list, err)
+	}
+
+	list, err = ParseOathList("LA DATA DE 05.09.2026\n1. 100/2020\n")
+	if err != nil || list.Time != nil {
+		t.Fatalf("missing hour must yield nil time: %+v %v", list, err)
+	}
+
+	if _, err = ParseOathList("no date here\n1. 100/2020\n"); err == nil {
+		t.Fatal("missing date must error")
+	}
+}

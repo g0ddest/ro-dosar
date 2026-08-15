@@ -12,4 +12,5 @@ var (
 	ErrInvalidFileType       = errors.New("invalid file type")
 	ErrRemoteFileNotFound    = errors.New("remote file not found (HTTP 404)")
 	ErrOrdinNotFound         = errors.New("ordin not found")
+	ErrOathNotFound          = errors.New("oath schedule entry not found")
 )

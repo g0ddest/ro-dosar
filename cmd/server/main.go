@@ -86,6 +86,9 @@ func main() {
 	w.RegisterActivity(activities.SaveAppointment)
 	w.RegisterActivity(activities.ExtractOrdine)
 	w.RegisterActivity(activities.SaveOrdine)
+	w.RegisterActivity(activities.ExtractOathLinks)
+	w.RegisterActivity(activities.ParseOathListPDF)
+	w.RegisterActivity(activities.SaveOathSchedule)
 
 	// Start worker in background
 	go func() {
