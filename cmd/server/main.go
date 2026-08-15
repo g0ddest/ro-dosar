@@ -89,6 +89,7 @@ func main() {
 	w.RegisterActivity(activities.ExtractOathLinks)
 	w.RegisterActivity(activities.ParseOathListPDF)
 	w.RegisterActivity(activities.SaveOathSchedule)
+	w.RegisterActivity(activities.DeletePDFContent)
 
 	// Start worker in background
 	go func() {
