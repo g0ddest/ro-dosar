@@ -35,4 +35,8 @@ type StatsRepository interface {
 	// before the given document: earlier year, or same year with a smaller
 	// document number (numbers are sequential within a year)
 	CountAheadInQueue(ctx context.Context, category string, year, number int) (int, error)
+
+	// CountSolvedInYear counts the category's documents whose solution_number
+	// year segment (e.g. 215/P/2021 -> 2021) equals the given year
+	CountSolvedInYear(ctx context.Context, category string, solutionYear int) (int, error)
 }
