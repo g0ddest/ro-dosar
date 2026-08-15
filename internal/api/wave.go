@@ -140,6 +140,10 @@ func buildWaveEstimate(cat CategoryStatsResponse, docYear, docNumber int, now ti
 
 	nowFrac := nowFraction(now)
 	censored := censoredYears(cat.Years)
+	if censored[docYear] {
+		resp.WavePassed = true
+		return resp
+	}
 	env := maturationEnvelope(cat.Years, censored, nowFrac)
 	if len(env) < 3 {
 		return resp

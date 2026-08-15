@@ -146,3 +146,13 @@ func TestWave_MonotoneAcrossRateBoundary(t *testing.T) {
 		t.Errorf("estimate must be monotone in the number: lo=%+v hi=%+v", lo, hi)
 	}
 }
+
+func TestWave_CensoredCohortWavePassed(t *testing.T) {
+	q := buildWaveEstimate(art11Fixture(), 2013, 100, fixtureNow)
+	if q == nil || !q.WavePassed {
+		t.Fatalf("censored-cohort dossier must report wavePassed: %+v", q)
+	}
+	if q.EstimatedMonthsMin != nil || q.EstimatedMonthsMax != nil {
+		t.Error("wavePassed must carry no months")
+	}
+}
