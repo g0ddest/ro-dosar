@@ -333,7 +333,7 @@
                                     <p class="font-semibold" :class="node.state === 'future' ? 'text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-white'" x-text="node.title"></p>
                                     <p x-show="node.subtitle" class="text-sm text-slate-600 dark:text-slate-300" x-text="node.subtitle"></p>
                                     <p x-show="node.extra" class="text-sm text-slate-500 dark:text-slate-400" x-text="node.extra"></p>
-                                    <a x-show="node.url" :href="node.url" target="_blank" rel="noopener" class="text-sm text-ro-blue dark:text-ro-yellow hover:underline">PDF</a>
+                                    <a x-show="node.url" :href="node.url" target="_blank" rel="noopener" class="text-sm text-ro-blue dark:text-ro-yellow hover:underline" x-text="node.urlText || 'PDF'"></a>
                                     <p x-show="node.disclaimer" class="text-xs text-slate-400 dark:text-slate-500 mt-1" x-text="node.disclaimer"></p>
                                 </div>
                             </div>
@@ -687,10 +687,14 @@
                         tlNoticed: 'noticed on {date}',
                         tlOrdin: 'Order published: {num}',
                         tlOrdinFuture: 'Order publication',
-                        tlOath: 'Citizenship oath',
                         tlOathInvitation: 'Oath invitation',
                         tlResult: 'Result: {result}',
-                        tlCertificate: 'Citizenship certificate'
+                        tlInExam: 'Dossier under examination',
+                        tlInExamDesc: 'The National Citizenship Authority is verifying that the legal requirements are met',
+                        tlAfterTitle: 'Oath and citizenship certificate',
+                        tlAfterInfo: 'These stages are not published online and will not appear in this tracker. After the order is published, the oath is scheduled (legal window: 6 months); the certificate is handed at the ceremony.',
+                        tlAfterInfoSolved: 'The order is published — the oath is now your step: book it and take it within the legal 6-month window; the certificate is handed at the ceremony. This tracker does not follow these stages.',
+                        tlAfterLink: 'Details and booking'
                     },
                     ro: {
                         title: 'RO-DOSAR - Verificare Cetățenie',
@@ -736,10 +740,14 @@
                         tlNoticed: 'observat la {date}',
                         tlOrdin: 'Ordin publicat: {num}',
                         tlOrdinFuture: 'Publicare ordin',
-                        tlOath: 'Jurământ de credință',
                         tlOathInvitation: 'Invitație la jurământ',
                         tlResult: 'Rezultat: {result}',
-                        tlCertificate: 'Certificat de cetățenie'
+                        tlInExam: 'Dosarul este în examinare',
+                        tlInExamDesc: 'Autoritatea Națională pentru Cetățenie verifică îndeplinirea condițiilor prevăzute de lege',
+                        tlAfterTitle: 'Jurământul și certificatul de cetățenie',
+                        tlAfterInfo: 'Aceste etape nu se publică online și nu vor apărea în acest tracker. După publicarea ordinului, jurământul se programează (termen legal: 6 luni); certificatul se înmânează la ceremonie.',
+                        tlAfterInfoSolved: 'Ordinul este publicat — jurământul este acum pasul dvs.: programați-l și depuneți-l în termenul legal de 6 luni; certificatul se înmânează la ceremonie. Acest tracker nu urmărește aceste etape.',
+                        tlAfterLink: 'Detalii și programare'
                     }
                 },
 
@@ -924,9 +932,9 @@
                             else subtitle = this.t('queueNoData');
                             disclaimer = this.t('queueDisclaimer');
                         }
+                        nodes.push({ state: 'current', title: this.t('tlInExam'), subtitle: this.t('tlInExamDesc') });
                         nodes.push({ state: 'projected', title: this.t('tlOrdinFuture'), subtitle, extra, disclaimer });
-                        nodes.push({ state: 'future', title: this.t('tlOath') });
-                        nodes.push({ state: 'future', title: this.t('tlCertificate') });
+                        nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfo'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
                     } else {
                         const apts = this.document.appointments || [];
                         for (const apt of apts) {
@@ -936,8 +944,7 @@
                                 nodes.push({ state: 'done', title: this.t('tlResult').replace('{result}', apt.result || ''), subtitle: this.formatDate(apt.date) });
                             }
                         }
-                        if (apts.length === 0) nodes.push({ state: 'future', title: this.t('tlOath') });
-                        nodes.push({ state: 'future', title: this.t('tlCertificate') });
+                        nodes.push({ state: 'info', title: this.t('tlAfterTitle'), subtitle: this.t('tlAfterInfoSolved'), url: 'https://cetatenie.just.ro/juramant/', urlText: this.t('tlAfterLink') });
                     }
                     return nodes;
                 },
@@ -945,6 +952,8 @@
                 nodeDotClass(node) {
                     if (node.state === 'done') return 'bg-ro-blue dark:bg-ro-yellow';
                     if (node.state === 'projected') return 'border-2 border-dashed border-amber-500 bg-transparent';
+                    if (node.state === 'current') return 'bg-ro-blue dark:bg-ro-yellow ring-4 ring-blue-200 dark:ring-amber-900/60 animate-pulse';
+                    if (node.state === 'info') return 'border-2 border-dotted border-slate-400 dark:border-slate-500 bg-transparent';
                     return 'border-2 border-slate-300 dark:border-slate-600 bg-transparent';
                 },
 
