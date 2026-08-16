@@ -173,15 +173,26 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildQueueInfo computes the wave-model estimate for an unsolved document
-// from the cached stats payload; no per-request SQL is involved
+// from the cached stats payloads; no per-request SQL is involved
 func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*QueueResponse, error) {
 	stats, err := h.getStatsCached(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	var cells []CohortCellResponse
+	if cohorts, err := h.getCohortStatsCached(ctx); err == nil {
+		for _, cc := range cohorts.Categories {
+			if cc.Category.Code == doc.Category.String() {
+				cells = cc.Cohorts
+				break
+			}
+		}
+	}
+
 	for _, cat := range stats.Categories {
 		if cat.Category.Code == doc.Category.String() {
-			return buildWaveEstimate(cat, doc.RegisteredAt.Year(), doc.DocumentNumber.Number, time.Now()), nil
+			return buildWaveEstimate(cat, cells, doc.RegisteredAt.Year(), doc.DocumentNumber.Number, time.Now()), nil
 		}
 	}
 	return nil, nil
@@ -241,21 +252,19 @@ func buildCohortResponse(cells []repository.CohortCell, now time.Time) *CohortSt
 	return resp
 }
 
-// GetCohortStats handles GET /api/v1/stats/cohorts
-func (h *Handler) GetCohortStats(w http.ResponseWriter, r *http.Request) {
+// getCohortStatsCached returns the cached cohort matrix, recomputing it when stale
+func (h *Handler) getCohortStatsCached(ctx context.Context) (*CohortStatsResponse, error) {
 	h.cohortMu.Lock()
 	if h.cohortCache != nil && time.Since(h.cohortCacheAt) < statsCacheTTL {
 		cached := h.cohortCache
 		h.cohortMu.Unlock()
-		h.writeJSON(w, http.StatusOK, cached)
-		return
+		return cached, nil
 	}
 	h.cohortMu.Unlock()
 
-	cells, err := h.statsRepo.GetCohortMatrix(r.Context())
+	cells, err := h.statsRepo.GetCohortMatrix(ctx)
 	if err != nil {
-		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
-		return
+		return nil, err
 	}
 
 	resp := buildCohortResponse(cells, time.Now())
@@ -265,5 +274,15 @@ func (h *Handler) GetCohortStats(w http.ResponseWriter, r *http.Request) {
 	h.cohortCacheAt = time.Now()
 	h.cohortMu.Unlock()
 
+	return resp, nil
+}
+
+// GetCohortStats handles GET /api/v1/stats/cohorts
+func (h *Handler) GetCohortStats(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.getCohortStatsCached(r.Context())
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
 	h.writeJSON(w, http.StatusOK, resp)
 }
