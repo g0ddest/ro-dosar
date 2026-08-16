@@ -1,8 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
+
+	"ro-dosar/internal/repository"
 )
 
 var fixtureNow = time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
@@ -27,7 +30,7 @@ func art11Fixture() CategoryStatsResponse {
 }
 
 func TestWave_HighPercentile2024(t *testing.T) {
-	q := buildWaveEstimate(art11Fixture(), 2024, 39946, fixtureNow)
+	q := buildWaveEstimate(art11Fixture(), nil, 2024, 39946, fixtureNow)
 	if q == nil {
 		t.Fatal("expected estimate")
 	}
@@ -47,7 +50,7 @@ func TestWave_HighPercentile2024(t *testing.T) {
 }
 
 func TestWave_RateCorrectionLowPercentile(t *testing.T) {
-	q := buildWaveEstimate(art11Fixture(), 2024, 5000, fixtureNow)
+	q := buildWaveEstimate(art11Fixture(), nil, 2024, 5000, fixtureNow)
 	if q == nil || q.WavePassed {
 		t.Fatalf("expected estimate: %+v", q)
 	}
@@ -62,7 +65,7 @@ func TestWave_RateCorrectionLowPercentile(t *testing.T) {
 
 func TestWave_WavePassed(t *testing.T) {
 	// cohort 2022 is 62.6%% solved; q = 15000/31325 = 0.479, target = 0.361 < 0.626
-	q := buildWaveEstimate(art11Fixture(), 2022, 15000, fixtureNow)
+	q := buildWaveEstimate(art11Fixture(), nil, 2022, 15000, fixtureNow)
 	if q == nil || !q.WavePassed {
 		t.Fatalf("expected wavePassed: %+v", q)
 	}
@@ -79,7 +82,7 @@ func TestWave_InsufficientCurve(t *testing.T) {
 			{Year: 2026, Total: 150, Solved: 0},
 		},
 	}
-	q := buildWaveEstimate(cat, 2026, 100, fixtureNow)
+	q := buildWaveEstimate(cat, nil, 2026, 100, fixtureNow)
 	if q == nil {
 		t.Fatal("expected percentile-only response")
 	}
@@ -102,14 +105,14 @@ func TestWave_TargetBeyondEnvelope(t *testing.T) {
 			{Year: 2024, Total: 1000, Solved: 100},
 		},
 	}
-	q := buildWaveEstimate(cat, 2024, 1000, fixtureNow)
+	q := buildWaveEstimate(cat, nil, 2024, 1000, fixtureNow)
 	if q == nil || q.WavePassed || q.EstimatedMonthsMin != nil {
 		t.Errorf("expected percentile-only: %+v", q)
 	}
 }
 
 func TestWave_UnknownCohort(t *testing.T) {
-	if q := buildWaveEstimate(art11Fixture(), 2005, 100, fixtureNow); q != nil {
+	if q := buildWaveEstimate(art11Fixture(), nil, 2005, 100, fixtureNow); q != nil {
 		t.Errorf("expected nil for unknown cohort, got %+v", q)
 	}
 }
@@ -121,7 +124,7 @@ func TestWave_CensoringExcludesOldYears(t *testing.T) {
 	// high ages breaking monotonicity of ages->shares; assert the estimate for
 	// the high-percentile dossier is unchanged when censored years are removed
 	// from the fixture entirely
-	full := buildWaveEstimate(art11Fixture(), 2024, 39946, fixtureNow)
+	full := buildWaveEstimate(art11Fixture(), nil, 2024, 39946, fixtureNow)
 	trimmed := art11Fixture()
 	var kept []YearStatsResponse
 	for _, y := range trimmed.Years {
@@ -130,15 +133,15 @@ func TestWave_CensoringExcludesOldYears(t *testing.T) {
 		}
 	}
 	trimmed.Years = kept
-	cut := buildWaveEstimate(trimmed, 2024, 39946, fixtureNow)
+	cut := buildWaveEstimate(trimmed, nil, 2024, 39946, fixtureNow)
 	if *full.EstimatedMonthsMin != *cut.EstimatedMonthsMin || *full.EstimatedMonthsMax != *cut.EstimatedMonthsMax {
 		t.Errorf("censoring must neutralize pre-2015 phantoms: full=%+v cut=%+v", full, cut)
 	}
 }
 
 func TestWave_MonotoneAcrossRateBoundary(t *testing.T) {
-	lo := buildWaveEstimate(art11Fixture(), 2024, 12199, fixtureNow)
-	hi := buildWaveEstimate(art11Fixture(), 2024, 12222, fixtureNow)
+	lo := buildWaveEstimate(art11Fixture(), nil, 2024, 12199, fixtureNow)
+	hi := buildWaveEstimate(art11Fixture(), nil, 2024, 12222, fixtureNow)
 	if lo == nil || hi == nil || lo.EstimatedMonthsMax == nil || hi.EstimatedMonthsMax == nil {
 		t.Fatalf("expected estimates: %+v %+v", lo, hi)
 	}
@@ -148,7 +151,7 @@ func TestWave_MonotoneAcrossRateBoundary(t *testing.T) {
 }
 
 func TestWave_CensoredCohortWavePassed(t *testing.T) {
-	q := buildWaveEstimate(art11Fixture(), 2013, 100, fixtureNow)
+	q := buildWaveEstimate(art11Fixture(), nil, 2013, 100, fixtureNow)
 	if q == nil || !q.WavePassed {
 		t.Fatalf("censored-cohort dossier must report wavePassed: %+v", q)
 	}
@@ -161,7 +164,7 @@ func TestWave_CurrentYearProjectedDenominator(t *testing.T) {
 	// fixtureNow is mid-August 2026: elapsed ~0.62, so cohort 2026's partial
 	// total (5115) is projected to ~8250 and q for No. 500 drops from ~0.098
 	// to ~0.06; displayed cohortTotal stays the actual 5115
-	q := buildWaveEstimate(art11Fixture(), 2026, 500, fixtureNow)
+	q := buildWaveEstimate(art11Fixture(), nil, 2026, 500, fixtureNow)
 	if q == nil || q.CohortTotal != 5115 {
 		t.Fatalf("wrong cohortTotal: %+v", q)
 	}
@@ -173,7 +176,7 @@ func TestWave_CurrentYearProjectedDenominator(t *testing.T) {
 func TestWave_SmallCohortPercentileOnly(t *testing.T) {
 	cat := art11Fixture()
 	cat.Years = append(cat.Years, YearStatsResponse{Year: 2009, Total: 40, Solved: 5})
-	q := buildWaveEstimate(cat, 2009, 20, fixtureNow)
+	q := buildWaveEstimate(cat, nil, 2009, 20, fixtureNow)
 	if q == nil || q.CohortTotal != 40 {
 		t.Fatalf("expected percentile-only for small cohort: %+v", q)
 	}
@@ -185,11 +188,156 @@ func TestWave_SmallCohortPercentileOnly(t *testing.T) {
 func TestWave_ZeroPaceFloor(t *testing.T) {
 	// cohort 2025 has no recent activity (r90 == 0) and a tiny tCurve target:
 	// the rate floor saturates at 12 months -> [9, 16]
-	q := buildWaveEstimate(art11Fixture(), 2025, 100, fixtureNow)
+	q := buildWaveEstimate(art11Fixture(), nil, 2025, 100, fixtureNow)
 	if q == nil || q.WavePassed || q.EstimatedMonthsMin == nil {
 		t.Fatalf("expected estimate: %+v", q)
 	}
 	if *q.EstimatedMonthsMin != 9 || *q.EstimatedMonthsMax != 16 {
 		t.Errorf("expected zero-pace floor [9, 16], got [%d, %d]", *q.EstimatedMonthsMin, *q.EstimatedMonthsMax)
+	}
+}
+
+// art11Cells is the production cohort matrix of 2026-08-15 (research fixture);
+// counts/p50/p90 are the live values, two dirty solYear rows included
+func art11Cells() []CohortCellResponse {
+	c := func(reg, sol, n, p50, p90 int) CohortCellResponse {
+		return CohortCellResponse{RegYear: reg, SolYear: sol, Count: n, P50: p50, P90: p90}
+	}
+	return []CohortCellResponse{
+		c(2018, 2019, 282, 31811, 72793), c(2018, 2020, 40078, 24816, 47839),
+		c(2018, 2021, 35403, 71895, 93729), c(2018, 2022, 5472, 71166, 94995),
+		c(2018, 2023, 1452, 73492, 97719), c(2018, 2024, 1369, 65950, 94455),
+		c(2018, 2025, 1143, 51222, 93531), c(2018, 2026, 401, 52796, 96178),
+		c(2019, 2021, 7873, 7499, 15036), c(2019, 2022, 44175, 41470, 74620),
+		c(2019, 2023, 19834, 86440, 100391), c(2019, 2024, 6504, 70905, 98232),
+		c(2019, 2025, 3616, 73514, 97490), c(2019, 2026, 804, 66706, 95653),
+		c(2021, 2023, 3681, 9594, 15405), c(2021, 2024, 14971, 26858, 41869),
+		c(2021, 2025, 5559, 27446, 41640), c(2021, 2026, 4858, 20570, 36526),
+		c(2022, 2023, 106, 5880, 16887), c(2022, 2024, 1464, 4082, 30288),
+		c(2022, 2025, 15462, 17826, 32849), c(2022, 2026, 2587, 33224, 39107),
+		c(2023, 2024, 107, 6362, 14091), c(2023, 2025, 1262, 15259, 38333),
+		c(2023, 2026, 6407, 9629, 39055),
+		c(2024, 2026, 1040, 11000, 21323),
+		// dirty solution-year typos observed live — must be filtered out;
+		// the 2023/8202 one is deliberately influential: unfiltered it gives
+		// cohort 2023 a second wave point with age 6179 and explodes the curve
+		c(2023, 8202, 5000, 30000, 41000), c(2018, 2230, 1, 52734, 52734),
+	}
+}
+
+func TestWaveV21_FlagshipCalibrated(t *testing.T) {
+	// Derivation (all per the spec's algorithm, fixtureNow = 2026-08-15):
+	// spans (maxP90 of cells n>=300, /0.95): 2018 ratio 1.097, 2019 1.093,
+	// 2021 1.139, 2022 1.314, 2023 1.061 (valid); 2024 own ratio 0.490 -> invalid;
+	// ratioMedian over 3 most recent valid {2021,2022,2023} = 1.1394;
+	// span(2024) = 45764*1.1394 = 52142.5 -> q = 39946/52142.5 = 0.7661 -> percentile 0.77.
+	// curve (cells n >= max(50, 5% of total), monotone-q walk, cohorts with >=2 pts):
+	// 2018 (0.241,2)(0.699,3); 2019 (0.071,2)(0.392,3)(0.818,4);
+	// 2021 (0.218,2)(0.609,3)(0.623,4); 2022 (0.433,3)(0.807,4); 2023 gives 1 pt -> excluded.
+	// pooled+running-max age at q=0.7661 -> 4.0; t = (2024.5+4.0-2026.6205)*12 = 22.55 mo;
+	// rate floor (q*phi=0.577 share target, R90=556) -> min(137,12)=12, t stays 22.55;
+	// v2.1 band: [floor(0.8t), ceil(1.5t)] = [18, 34].
+	q := buildWaveEstimate(art11Fixture(), art11Cells(), 2024, 39946, fixtureNow)
+	if q == nil || q.WavePassed {
+		t.Fatalf("expected estimate: %+v", q)
+	}
+	if q.Percentile != 0.77 {
+		t.Errorf("expected span-corrected percentile 0.77, got %v", q.Percentile)
+	}
+	if q.EstimatedMonthsMin == nil || *q.EstimatedMonthsMin != 18 || *q.EstimatedMonthsMax != 34 {
+		t.Errorf("expected [18, 34], got %+v", q)
+	}
+}
+
+func TestWaveV21_NilCellsReproducesV2(t *testing.T) {
+	q := buildWaveEstimate(art11Fixture(), nil, 2024, 39946, fixtureNow)
+	if q == nil || q.Percentile != 0.87 ||
+		q.EstimatedMonthsMin == nil || *q.EstimatedMonthsMin != 21 || *q.EstimatedMonthsMax != 36 {
+		t.Errorf("nil cells must reproduce v2 exactly ([21, 36], percentile 0.87): %+v", q)
+	}
+}
+
+func TestWaveV21_DirtyCellsHarmless(t *testing.T) {
+	clean := buildWaveEstimate(art11Fixture(), art11Cells()[:len(art11Cells())-2], 2024, 39946, fixtureNow)
+	dirty := buildWaveEstimate(art11Fixture(), art11Cells(), 2024, 39946, fixtureNow)
+	if *clean.EstimatedMonthsMin != *dirty.EstimatedMonthsMin || *clean.EstimatedMonthsMax != *dirty.EstimatedMonthsMax {
+		t.Errorf("dirty solYear cells must be filtered: clean=%+v dirty=%+v", clean, dirty)
+	}
+}
+
+func TestWaveV21_ShortCurveFallsBackToEnvelope(t *testing.T) {
+	// only cohort 2023's cells: one wave point -> curve too short -> v2 envelope
+	// path (with span-corrected q) must be used; band multiplier stays 1.3.
+	var subset []CohortCellResponse
+	for _, c := range art11Cells() {
+		if c.RegYear == 2023 {
+			subset = append(subset, c)
+		}
+	}
+	q := buildWaveEstimate(art11Fixture(), subset, 2024, 39946, fixtureNow)
+	if q == nil || q.EstimatedMonthsMin == nil {
+		t.Fatalf("expected estimate: %+v", q)
+	}
+	// span(2024) = 45764 * 1.0610 (2023's ratio is the only valid one) = 48557;
+	// q = 0.8226 -> target 0.6199; envelope crossing is between cohorts 2023
+	// (age 3.12, share 0.2009) and 2022 (age 4.12, share 0.6264):
+	// frac = (0.6199-0.2009)/(0.6264-0.2009) = 0.9845;
+	// aStar = 3.12055 + 0.9845*(4.1206-3.12055) = 3.1206 + 0.9845 = 4.105;
+	// t = (2024.5+4.105-2026.6205)*12 = (4.105-2.1205)*12 = 23.82 mo;
+	// band 1.3: [floor(19.05), ceil(30.96)] = [19, 31]
+	if *q.EstimatedMonthsMin != 19 || *q.EstimatedMonthsMax != 31 {
+		t.Errorf("expected envelope-path [19, 31], got [%d, %d]", *q.EstimatedMonthsMin, *q.EstimatedMonthsMax)
+	}
+}
+
+func TestWaveV21_ImmatureCohortGivesNoSpanEvidence(t *testing.T) {
+	// A young cohort whose wave barely clears the 1.0 ratio gate must not
+	// capture ratioMedian: this cell gives 2025 a plausible own ratio of
+	// ~1.02 (P90 = 0.95 * 1.02 * total(2025) = 0.95 * 1.02 * 18213 ≈ 17648),
+	// but 2025 is younger than waveSpanMinAgeYears (fixtureNow.Year()-3 =
+	// 2023), so the spans map and the ratio pool must ignore it: the
+	// flagship keeps percentile 0.77 and [18, 34]. Without the gate, 2025
+	// displaces 2021 from the 3 most-recent-year ratio pool, dragging
+	// ratioMedian from 1.1394 down to 1.0610 and the percentile up to 0.82
+	// (the months band happens to round to the same [18, 34] either way, so
+	// percentile is the assertion that actually catches the regression).
+	cells := append(art11Cells(),
+		CohortCellResponse{RegYear: 2025, SolYear: 2026, Count: 2000, P50: 15000, P90: 17648},
+	)
+	q := buildWaveEstimate(art11Fixture(), cells, 2024, 39946, fixtureNow)
+	if q == nil || q.EstimatedMonthsMin == nil ||
+		*q.EstimatedMonthsMin != 18 || *q.EstimatedMonthsMax != 34 {
+		t.Errorf("immature 2025 cohort must not shift the estimate: %+v", q)
+	}
+	if q.Percentile != 0.77 {
+		t.Errorf("immature 2025 cohort must not shift ratioMedian: expected percentile 0.77, got %v", q.Percentile)
+	}
+}
+
+func TestGetDocument_WaveUsesCohortCells(t *testing.T) {
+	docRepo := newQueueDocument(t, "39946/RD/2024", time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC), "ART_11", false)
+	fix := art11Fixture()
+	statsRepo := &MockStatsRepository{}
+	for _, y := range fix.Years {
+		statsRepo.yearly = append(statsRepo.yearly, repository.CategoryYearStats{Category: "ART_11", Year: y.Year, Total: y.Total, Solved: y.Solved})
+	}
+	for _, a := range fix.RecentActivity {
+		statsRepo.activity = append(statsRepo.activity, repository.CategoryYearActivity{Category: "ART_11", Year: a.Year, Solved: a.Solved})
+	}
+	for _, c := range art11Cells() {
+		statsRepo.cohorts = append(statsRepo.cohorts, repository.CohortCell{Category: "ART_11", RegYear: c.RegYear, SolYear: c.SolYear, Count: c.Count, P50: c.P50, P90: c.P90})
+	}
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo,
+		&MockAuditRepository{}, &MockOrdinRepository{}, &MockOathRepository{})
+
+	rec := doDocumentRequest(t, handler, "39946", "RD", "2024")
+
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Queue == nil || resp.Queue.EstimatedMonthsMin == nil ||
+		*resp.Queue.EstimatedMonthsMin != 18 || *resp.Queue.EstimatedMonthsMax != 34 {
+		t.Errorf("expected calibrated [18, 34] through the handler, got %+v", resp.Queue)
 	}
 }

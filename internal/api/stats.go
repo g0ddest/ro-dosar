@@ -13,6 +13,7 @@ import (
 const (
 	activityWindowDays = 90
 	statsCacheTTL      = 15 * time.Minute
+	statsErrorCacheTTL = 30 * time.Second
 )
 
 // statsCategoryOrder is the fixed presentation order for categories
@@ -133,14 +134,11 @@ func buildStatsResponse(yearly []repository.CategoryYearStats, activity []reposi
 
 // getStatsCached returns the cached stats response, recomputing it when stale
 func (h *Handler) getStatsCached(ctx context.Context) (*StatsResponse, error) {
-	h.statsMu.Lock()
-	if h.statsCache != nil && time.Since(h.statsCacheAt) < statsCacheTTL {
-		cached := h.statsCache
-		h.statsMu.Unlock()
-		return cached, nil
-	}
-	h.statsMu.Unlock()
+	return h.statsCache.get(ctx, statsCacheTTL, statsErrorCacheTTL, h.loadStats)
+}
 
+// loadStats queries the stats repository and assembles the stats payload
+func (h *Handler) loadStats(ctx context.Context) (*StatsResponse, error) {
 	yearly, err := h.statsRepo.GetYearlyStats(ctx)
 	if err != nil {
 		return nil, err
@@ -152,14 +150,7 @@ func (h *Handler) getStatsCached(ctx context.Context) (*StatsResponse, error) {
 		return nil, err
 	}
 
-	resp := buildStatsResponse(yearly, activity, time.Now())
-
-	h.statsMu.Lock()
-	h.statsCache = resp
-	h.statsCacheAt = time.Now()
-	h.statsMu.Unlock()
-
-	return resp, nil
+	return buildStatsResponse(yearly, activity, time.Now()), nil
 }
 
 // GetStats handles GET /api/v1/stats
@@ -173,15 +164,26 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildQueueInfo computes the wave-model estimate for an unsolved document
-// from the cached stats payload; no per-request SQL is involved
+// from the cached stats payloads; no per-request SQL is involved
 func (h *Handler) buildQueueInfo(ctx context.Context, doc *domain.Document) (*QueueResponse, error) {
 	stats, err := h.getStatsCached(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	var cells []CohortCellResponse
+	if cohorts, err := h.getCohortStatsCached(ctx); err == nil {
+		for _, cc := range cohorts.Categories {
+			if cc.Category.Code == doc.Category.String() {
+				cells = cc.Cohorts
+				break
+			}
+		}
+	}
+
 	for _, cat := range stats.Categories {
 		if cat.Category.Code == doc.Category.String() {
-			return buildWaveEstimate(cat, doc.RegisteredAt.Year(), doc.DocumentNumber.Number, time.Now()), nil
+			return buildWaveEstimate(cat, cells, doc.RegisteredAt.Year(), doc.DocumentNumber.Number, time.Now()), nil
 		}
 	}
 	return nil, nil
@@ -241,29 +243,26 @@ func buildCohortResponse(cells []repository.CohortCell, now time.Time) *CohortSt
 	return resp
 }
 
+// getCohortStatsCached returns the cached cohort matrix, recomputing it when stale
+func (h *Handler) getCohortStatsCached(ctx context.Context) (*CohortStatsResponse, error) {
+	return h.cohortCache.get(ctx, statsCacheTTL, statsErrorCacheTTL, h.loadCohortStats)
+}
+
+// loadCohortStats queries the cohort matrix and assembles the cohorts payload
+func (h *Handler) loadCohortStats(ctx context.Context) (*CohortStatsResponse, error) {
+	cells, err := h.statsRepo.GetCohortMatrix(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return buildCohortResponse(cells, time.Now()), nil
+}
+
 // GetCohortStats handles GET /api/v1/stats/cohorts
 func (h *Handler) GetCohortStats(w http.ResponseWriter, r *http.Request) {
-	h.cohortMu.Lock()
-	if h.cohortCache != nil && time.Since(h.cohortCacheAt) < statsCacheTTL {
-		cached := h.cohortCache
-		h.cohortMu.Unlock()
-		h.writeJSON(w, http.StatusOK, cached)
-		return
-	}
-	h.cohortMu.Unlock()
-
-	cells, err := h.statsRepo.GetCohortMatrix(r.Context())
+	resp, err := h.getCohortStatsCached(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-
-	resp := buildCohortResponse(cells, time.Now())
-
-	h.cohortMu.Lock()
-	h.cohortCache = resp
-	h.cohortCacheAt = time.Now()
-	h.cohortMu.Unlock()
-
 	h.writeJSON(w, http.StatusOK, resp)
 }

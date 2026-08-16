@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"sync"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -22,13 +20,8 @@ type Handler struct {
 	ordinRepo       repository.OrdinRepository
 	oathRepo        repository.OathRepository
 
-	statsMu      sync.Mutex
-	statsCache   *StatsResponse
-	statsCacheAt time.Time
-
-	cohortMu      sync.Mutex
-	cohortCache   *CohortStatsResponse
-	cohortCacheAt time.Time
+	statsCache  *staleCache[StatsResponse]
+	cohortCache *staleCache[CohortStatsResponse]
 }
 
 // NewHandler creates a new API handler
@@ -40,6 +33,8 @@ func NewHandler(documentRepo repository.DocumentRepository, appointmentRepo repo
 		auditRepo:       auditRepo,
 		ordinRepo:       ordinRepo,
 		oathRepo:        oathRepo,
+		statsCache:      newStaleCache[StatsResponse](),
+		cohortCache:     newStaleCache[CohortStatsResponse](),
 	}
 }
 
