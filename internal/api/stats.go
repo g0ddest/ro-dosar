@@ -13,6 +13,7 @@ import (
 const (
 	activityWindowDays = 90
 	statsCacheTTL      = 15 * time.Minute
+	statsErrorCacheTTL = 30 * time.Second
 )
 
 // statsCategoryOrder is the fixed presentation order for categories
@@ -133,14 +134,11 @@ func buildStatsResponse(yearly []repository.CategoryYearStats, activity []reposi
 
 // getStatsCached returns the cached stats response, recomputing it when stale
 func (h *Handler) getStatsCached(ctx context.Context) (*StatsResponse, error) {
-	h.statsMu.Lock()
-	if h.statsCache != nil && time.Since(h.statsCacheAt) < statsCacheTTL {
-		cached := h.statsCache
-		h.statsMu.Unlock()
-		return cached, nil
-	}
-	h.statsMu.Unlock()
+	return h.statsCache.get(ctx, statsCacheTTL, statsErrorCacheTTL, h.loadStats)
+}
 
+// loadStats queries the stats repository and assembles the stats payload
+func (h *Handler) loadStats(ctx context.Context) (*StatsResponse, error) {
 	yearly, err := h.statsRepo.GetYearlyStats(ctx)
 	if err != nil {
 		return nil, err
@@ -152,14 +150,7 @@ func (h *Handler) getStatsCached(ctx context.Context) (*StatsResponse, error) {
 		return nil, err
 	}
 
-	resp := buildStatsResponse(yearly, activity, time.Now())
-
-	h.statsMu.Lock()
-	h.statsCache = resp
-	h.statsCacheAt = time.Now()
-	h.statsMu.Unlock()
-
-	return resp, nil
+	return buildStatsResponse(yearly, activity, time.Now()), nil
 }
 
 // GetStats handles GET /api/v1/stats
@@ -254,27 +245,16 @@ func buildCohortResponse(cells []repository.CohortCell, now time.Time) *CohortSt
 
 // getCohortStatsCached returns the cached cohort matrix, recomputing it when stale
 func (h *Handler) getCohortStatsCached(ctx context.Context) (*CohortStatsResponse, error) {
-	h.cohortMu.Lock()
-	if h.cohortCache != nil && time.Since(h.cohortCacheAt) < statsCacheTTL {
-		cached := h.cohortCache
-		h.cohortMu.Unlock()
-		return cached, nil
-	}
-	h.cohortMu.Unlock()
+	return h.cohortCache.get(ctx, statsCacheTTL, statsErrorCacheTTL, h.loadCohortStats)
+}
 
+// loadCohortStats queries the cohort matrix and assembles the cohorts payload
+func (h *Handler) loadCohortStats(ctx context.Context) (*CohortStatsResponse, error) {
 	cells, err := h.statsRepo.GetCohortMatrix(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	resp := buildCohortResponse(cells, time.Now())
-
-	h.cohortMu.Lock()
-	h.cohortCache = resp
-	h.cohortCacheAt = time.Now()
-	h.cohortMu.Unlock()
-
-	return resp, nil
+	return buildCohortResponse(cells, time.Now()), nil
 }
 
 // GetCohortStats handles GET /api/v1/stats/cohorts

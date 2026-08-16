@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -366,6 +367,41 @@ func TestGetDocument_WaveQueueForUnsolved(t *testing.T) {
 		if strings.Contains(rec.Body.String(), gone) {
 			t.Errorf("legacy field %s must be gone", gone)
 		}
+	}
+}
+
+func TestGetDocument_CohortErrorDegradesToV2(t *testing.T) {
+	// GetCohortMatrix failing must not drop the queue block: the estimator
+	// falls back to the v2 path (nil cells) and the request still succeeds.
+	docRepo := newQueueDocument(t, "39946/RD/2024", time.Date(2024, 5, 1, 0, 0, 0, 0, time.UTC), "ART_11", false)
+	fix := art11Fixture()
+	statsRepo := &MockStatsRepository{}
+	for _, y := range fix.Years {
+		statsRepo.yearly = append(statsRepo.yearly, repository.CategoryYearStats{
+			Category: "ART_11", Year: y.Year, Total: y.Total, Solved: y.Solved,
+		})
+	}
+	for _, a := range fix.RecentActivity {
+		statsRepo.activity = append(statsRepo.activity, repository.CategoryYearActivity{
+			Category: "ART_11", Year: a.Year, Solved: a.Solved,
+		})
+	}
+	statsRepo.cohortsErr = errors.New("boom")
+	handler := NewHandler(docRepo, NewMockAppointmentRepository(), statsRepo,
+		&MockAuditRepository{}, &MockOrdinRepository{}, &MockOathRepository{})
+
+	rec := doDocumentRequest(t, handler, "39946", "RD", "2024")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp DocumentResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Queue == nil || resp.Queue.EstimatedMonthsMin == nil ||
+		*resp.Queue.EstimatedMonthsMin != 21 || *resp.Queue.EstimatedMonthsMax != 36 {
+		t.Errorf("expected v2 fallback [21, 36] when the cohort query fails, got %+v", resp.Queue)
 	}
 }
 
