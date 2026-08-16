@@ -27,6 +27,7 @@ const (
 	waveCurveCellShare   = 0.05
 	waveCurveMinPoints   = 3
 	waveRangeHighV21     = 1.5
+	waveSpanMinAgeYears  = 3
 )
 
 type wavePoint struct {
@@ -125,11 +126,11 @@ func envelopeAgeAt(env []wavePoint, target float64) (float64, bool) {
 }
 
 // filterCells drops cells with implausible solution years (live data contains
-// typo years like 8202)
+// typo years like 8202) or a solution predating the registration
 func filterCells(cells []CohortCellResponse, now time.Time) []CohortCellResponse {
 	var out []CohortCellResponse
 	for _, c := range cells {
-		if c.SolYear >= 2001 && c.SolYear <= now.Year()+1 {
+		if c.SolYear >= 2001 && c.SolYear <= now.Year()+1 && c.SolYear >= c.RegYear {
 			out = append(out, c)
 		}
 	}
@@ -138,8 +139,10 @@ func filterCells(cells []CohortCellResponse, now time.Time) []CohortCellResponse
 
 // cohortSpans estimates each cohort's real document-number span from the
 // matrix p90s; returns valid spans and the median span/total ratio of the
-// most recent cohorts that have one
-func cohortSpans(years []YearStatsResponse, censored map[int]bool, cells []CohortCellResponse) (map[int]float64, float64) {
+// most recent cohorts that have one. Cohorts younger than
+// waveSpanMinAgeYears are skipped entirely: their wave hasn't reached the
+// high numbers yet, so the span would systematically underestimate.
+func cohortSpans(years []YearStatsResponse, censored map[int]bool, cells []CohortCellResponse, now time.Time) (map[int]float64, float64) {
 	totals := map[int]int{}
 	for _, y := range years {
 		totals[y.Year] = y.Total
@@ -151,6 +154,9 @@ func cohortSpans(years []YearStatsResponse, censored map[int]bool, cells []Cohor
 			continue
 		}
 		if censored[c.RegYear] || totals[c.RegYear] < waveMinCohortSize {
+			continue
+		}
+		if c.RegYear > now.Year()-waveSpanMinAgeYears {
 			continue
 		}
 		if c.P90 > maxP90[c.RegYear] {
@@ -308,7 +314,7 @@ func buildWaveEstimate(cat CategoryStatsResponse, cells []CohortCellResponse, do
 	var spans map[int]float64
 	var ratioMedian float64
 	if len(cells) > 0 {
-		spans, ratioMedian = cohortSpans(cat.Years, censored, cells)
+		spans, ratioMedian = cohortSpans(cat.Years, censored, cells, now)
 		if s, ok := spans[docYear]; ok {
 			span = s
 		} else {

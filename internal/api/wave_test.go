@@ -279,14 +279,38 @@ func TestWaveV21_ShortCurveFallsBackToEnvelope(t *testing.T) {
 		t.Fatalf("expected estimate: %+v", q)
 	}
 	// span(2024) = 45764 * 1.0610 (2023's ratio is the only valid one) = 48557;
-	// q = 0.8226 -> target 0.6199; envelope crossing between cohorts 2022 (0.6264)...
-	// target < 0.6264 crossing between 2023 (0.2009, age 3.12) and 2022 (0.6264, age 4.12):
-	// frac = (0.6199-0.2009)/0.4256 = 0.9845 -> aStar-age(2024) = 1.9845+...
-	// tCurve = ((2023+0.5+ (age interp)) ... = 12*(interp offset) — derive numerically:
-	// aStar = 3.12055+0.9845 = 4.105; t = (2024.5+... use aStar-age(2024)=4.105-2.1206=1.985 yr = 23.82 mo
+	// q = 0.8226 -> target 0.6199; envelope crossing is between cohorts 2023
+	// (age 3.12, share 0.2009) and 2022 (age 4.12, share 0.6264):
+	// frac = (0.6199-0.2009)/(0.6264-0.2009) = 0.9845;
+	// aStar = 3.12055 + 0.9845*(4.1206-3.12055) = 3.1206 + 0.9845 = 4.105;
+	// t = (2024.5+4.105-2026.6205)*12 = (4.105-2.1205)*12 = 23.82 mo;
 	// band 1.3: [floor(19.05), ceil(30.96)] = [19, 31]
 	if *q.EstimatedMonthsMin != 19 || *q.EstimatedMonthsMax != 31 {
 		t.Errorf("expected envelope-path [19, 31], got [%d, %d]", *q.EstimatedMonthsMin, *q.EstimatedMonthsMax)
+	}
+}
+
+func TestWaveV21_ImmatureCohortGivesNoSpanEvidence(t *testing.T) {
+	// A young cohort whose wave barely clears the 1.0 ratio gate must not
+	// capture ratioMedian: this cell gives 2025 a plausible own ratio of
+	// ~1.02 (P90 = 0.95 * 1.02 * total(2025) = 0.95 * 1.02 * 18213 ≈ 17648),
+	// but 2025 is younger than waveSpanMinAgeYears (fixtureNow.Year()-3 =
+	// 2023), so the spans map and the ratio pool must ignore it: the
+	// flagship keeps percentile 0.77 and [18, 34]. Without the gate, 2025
+	// displaces 2021 from the 3 most-recent-year ratio pool, dragging
+	// ratioMedian from 1.1394 down to 1.0610 and the percentile up to 0.82
+	// (the months band happens to round to the same [18, 34] either way, so
+	// percentile is the assertion that actually catches the regression).
+	cells := append(art11Cells(),
+		CohortCellResponse{RegYear: 2025, SolYear: 2026, Count: 2000, P50: 15000, P90: 17648},
+	)
+	q := buildWaveEstimate(art11Fixture(), cells, 2024, 39946, fixtureNow)
+	if q == nil || q.EstimatedMonthsMin == nil ||
+		*q.EstimatedMonthsMin != 18 || *q.EstimatedMonthsMax != 34 {
+		t.Errorf("immature 2025 cohort must not shift the estimate: %+v", q)
+	}
+	if q.Percentile != 0.77 {
+		t.Errorf("immature 2025 cohort must not shift ratioMedian: expected percentile 0.77, got %v", q.Percentile)
 	}
 }
 
