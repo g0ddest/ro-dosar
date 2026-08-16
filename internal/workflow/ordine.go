@@ -116,14 +116,10 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			}
 
 			var parsed activity.ParseOathListPDFOutput
-			if err := workflow.ExecuteActivity(ctx, activities.ParseOathListPDF, activity.ParseOathListPDFInput{
-				Hash: download.Hash,
-			}).Get(ctx, &parsed); err != nil {
+			if err := workflow.ExecuteActivity(ctx, activities.ParseOathListPDF, activity.ParseOathListPDFInput(download)).Get(ctx, &parsed); err != nil {
 				logger.Error("Oath list parse failed", "url", listURL, "error", err)
 				output.Failed = append(output.Failed, listURL)
-				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
-					Hash: download.Hash,
-				}).Get(ctx, nil); err != nil {
+				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput(download)).Get(ctx, nil); err != nil {
 					logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
 				}
 				continue
@@ -132,9 +128,7 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			if len(parsed.Entries) == 0 {
 				logger.Error("Oath list parsed to zero entries — leaving unparsed for retry", "url", listURL)
 				output.Failed = append(output.Failed, listURL)
-				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
-					Hash: download.Hash,
-				}).Get(ctx, nil); err != nil {
+				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput(download)).Get(ctx, nil); err != nil {
 					logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
 				}
 				continue
@@ -148,9 +142,7 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 			}).Get(ctx, nil); err != nil {
 				logger.Error("Oath schedule save failed", "url", listURL, "error", err)
 				output.Failed = append(output.Failed, listURL)
-				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
-					Hash: download.Hash,
-				}).Get(ctx, nil); err != nil {
+				if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput(download)).Get(ctx, nil); err != nil {
 					logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
 				}
 				continue
@@ -165,9 +157,7 @@ func OrdineIndexWorkflow(ctx workflow.Context, input OrdineIndexWorkflowInput) (
 				logger.Error("Oath parsed-file record failed", "url", listURL, "error", err)
 			}
 
-			if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput{
-				Hash: download.Hash,
-			}).Get(ctx, nil); err != nil {
+			if err := workflow.ExecuteActivity(ctx, activities.DeletePDFContent, activity.DeletePDFContentInput(download)).Get(ctx, nil); err != nil {
 				logger.Error("Oath pdf-content cleanup failed", "hash", download.Hash, "error", err)
 			}
 
