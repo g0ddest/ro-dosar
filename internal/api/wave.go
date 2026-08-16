@@ -239,7 +239,12 @@ func empiricalCurve(years []YearStatsResponse, censored map[int]bool, cells []Co
 		}
 	}
 
-	sort.Slice(pooled, func(i, j int) bool { return pooled[i].share < pooled[j].share })
+	sort.Slice(pooled, func(i, j int) bool {
+		if pooled[i].share != pooled[j].share {
+			return pooled[i].share < pooled[j].share
+		}
+		return pooled[i].age < pooled[j].age
+	})
 	running := 0.0
 	for i := range pooled {
 		if pooled[i].age > running {
