@@ -68,3 +68,45 @@ func TestStaleCache_NegativeWindowSuppressesRetries(t *testing.T) {
 		t.Errorf("expected 1 load within the negative window, got %d", calls.Load())
 	}
 }
+
+func TestStaleCache_RecoversAfterPanicInLoad(t *testing.T) {
+	c := newStaleCache[int]()
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = c.get(context.Background(), time.Minute, 0, func(context.Context) (*int, error) { panic("boom") })
+	}()
+	done := make(chan struct{})
+	go func() {
+		v := 42
+		got, err := c.get(context.Background(), time.Minute, 0, func(context.Context) (*int, error) { return &v, nil })
+		if err != nil || *got != 42 {
+			t.Errorf("get after panic: %v %v", got, err)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("staleCache deadlocked after a panicking load")
+	}
+}
+
+func TestStaleCache_CanceledLoadDoesNotStampNegativeWindow(t *testing.T) {
+	c := newStaleCache[int]()
+	var calls atomic.Int32
+	fail := func(context.Context) (*int, error) {
+		calls.Add(1)
+		return nil, context.Canceled
+	}
+	if _, err := c.get(context.Background(), time.Minute, time.Minute, fail); err == nil {
+		t.Fatal("expected error")
+	}
+	// a canceled load is not evidence the backend is unhealthy: the negative
+	// window must not be stamped, so a second get retries immediately
+	if _, err := c.get(context.Background(), time.Minute, time.Minute, fail); err == nil {
+		t.Fatal("expected error")
+	}
+	if calls.Load() != 2 {
+		t.Errorf("expected the load to be retried after a canceled load, got %d calls", calls.Load())
+	}
+}

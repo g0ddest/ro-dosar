@@ -11,6 +11,9 @@ import (
 // stale value to serve
 var errNegativeCache = errors.New("stats refresh failed recently, retry later")
 
+// staleCacheLoadTimeout bounds the detached refresh query
+const staleCacheLoadTimeout = 60 * time.Second
+
 // staleCache is a single-flight TTL cache: concurrent stale reads trigger
 // exactly one load, a failed refresh serves the last good value when one
 // exists, and a short negative window suppresses retry storms when there is
@@ -58,21 +61,35 @@ func (c *staleCache[T]) get(ctx context.Context, ttl, errTTL time.Duration, load
 	c.loading = true
 	c.mu.Unlock()
 
-	val, err := load(ctx)
+	// the loading flag must clear even when load panics (net/http recovers
+	// panics per request, so a stuck flag would strand every later caller
+	// in cond.Wait forever)
+	defer func() {
+		c.mu.Lock()
+		c.loading = false
+		c.cond.Broadcast()
+		c.mu.Unlock()
+	}()
+
+	// the load outlives the leader's request: a client disconnect must not
+	// abort the shared refresh or count as a backend failure
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), staleCacheLoadTimeout)
+	defer cancel()
+	val, err := load(loadCtx)
 
 	c.mu.Lock()
-	c.loading = false
 	if err == nil {
 		c.val = val
 		c.at = time.Now()
 		c.failAt = time.Time{}
 	} else {
-		c.failAt = time.Now()
+		if !errors.Is(err, context.Canceled) {
+			c.failAt = time.Now()
+		}
 		if c.val != nil {
 			val, err = c.val, nil
 		}
 	}
-	c.cond.Broadcast()
 	c.mu.Unlock()
 	return val, err
 }
